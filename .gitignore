@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-electron/
+packages/client/src/dist-electron/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

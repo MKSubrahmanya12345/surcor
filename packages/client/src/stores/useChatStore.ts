@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import type {
   AgentMode,
+  CadFailure,
+  CadModelResult,
+  CadProgressEvent,
   ChatMessage,
   Checkpoint,
   DiffProposal,
@@ -79,6 +82,34 @@ function withResultChunk(messages: ChatMessage[], chunk: ToolResult): ChatMessag
   return next;
 }
 
+/** One line of the CAD progress log, in arrival order (never a spinner). */
+export interface CadProgressLine {
+  stage: CadProgressEvent["stage"];
+  detail: string;
+  at: number;
+}
+
+export interface CadPanelState {
+  running: boolean;
+  prompt: string;
+  progress: CadProgressLine[];
+  result: CadModelResult | null;
+  failure: CadFailure | null;
+  /** MAC's own diagnostics, kept so the failure card can quote real entries. */
+  diagnostics: string[];
+}
+
+const CAD_PROGRESS_CAP = 200;
+
+const emptyCad: CadPanelState = {
+  running: false,
+  prompt: "",
+  progress: [],
+  result: null,
+  failure: null,
+  diagnostics: [],
+};
+
 interface ChatState {
   connection: AgentConnectionStatus;
   /** true once the server answered init with session_ready */
@@ -93,7 +124,15 @@ interface ChatState {
   serverError: string | null;
   /** Prompt 6: live MCP server states pushed by the agent server. */
   mcpServers: McpServerStatus[];
+  /**
+   * Prompt 7: CAD mode. Kept *out* of `messages` on purpose — progress lines and
+   * a model card are not chat content, and mixing them into the transcript would
+   * leak fake "assistant" turns into Ask/Agent/Plan history.
+   */
+  cad: CadPanelState;
   setMode: (mode: AgentMode) => void;
+  requestCadModel: (prompt: string) => void;
+  clearCad: () => void;
   sendMessage: (content: string) => void;
   cancelTurn: () => void;
   approvePlan: () => void;
@@ -141,14 +180,52 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   checkpoints: [],
   serverError: null,
   mcpServers: [],
+  cad: emptyCad,
 
   setMode: (mode) => set({ mode }),
+
+  /**
+   * Prompt 7: CAD mode rides the same socket but a different message —
+   * `cad_generate` starts the pipeline, and the existing `cancel` message aborts
+   * it. No provider call is made, so a CAD run costs nothing if the search path
+   * finds a real file.
+   */
+  requestCadModel: (prompt) => {
+    const text = prompt.trim();
+    if (!text) return;
+    const state = get();
+    if (!state.ready || state.cad.running) return;
+    if (!agentSocket.send({ type: "cad_generate", prompt: text })) {
+      set({ serverError: "Not connected to the agent server." });
+      return;
+    }
+    set((current) => ({
+      busy: true,
+      serverError: null,
+      // The server persists this user row too; appending it here keeps the
+      // transcript coherent before a reload instead of after one.
+      messages: [...current.messages, {
+        id: crypto.randomUUID(), role: "user", content: text, mode: "cad", createdAt: Date.now(),
+      }],
+      cad: { ...emptyCad, running: true, prompt: text, progress: [{
+        stage: "searching_existing", detail: `queued: "${text}"`, at: Date.now(),
+      }] },
+    }));
+  },
+
+  clearCad: () => set({ cad: emptyCad }),
 
   sendMessage: (content) => {
     const text = content.trim();
     if (!text) return;
     const state = get();
     if (!state.ready || state.busy) return;
+    // Prompt 7: CAD mode is not a chat turn. The composer keeps working as the
+    // input for it, so the mode switcher is the only thing that changed here.
+    if (state.mode === "cad") {
+      get().requestCadModel(text);
+      return;
+    }
     if (state.pendingPlanId && state.mode === "agent") {
       set({
         serverError:
@@ -177,7 +254,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   cancelTurn: () => {
     if (!agentSocket.send({ type: "cancel" })) return;
     turnCheckpointTaken = false;
-    set({ busy: false, pendingPlanId: null });
+    set((current) => ({
+      busy: false,
+      pendingPlanId: null,
+      // The server answers a cancelled CAD job with cad_generation_failed; until
+      // it does, the panel must not look like a run is still in flight.
+      ...(current.cad.running ? { cad: { ...current.cad, running: false } } : {}),
+    }));
   },
 
   approvePlan: () => {
@@ -240,6 +323,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       pendingPlanId: null,
       checkpoints: [],
       serverError: null,
+      cad: emptyCad,
     });
   },
 }));
@@ -333,8 +417,56 @@ function handleServerMessage(message: ServerMessage): void {
     case "plan_ready":
       useChatStore.setState({ pendingPlanId: message.messageId });
       return;
+    case "cad_progress":
+      useChatStore.setState((current) => ({
+        busy: true,
+        cad: {
+          ...current.cad,
+          running: true,
+          progress: [...current.cad.progress, { ...message.event, at: Date.now() }].slice(-CAD_PROGRESS_CAP),
+        },
+      }));
+      return;
+    case "cad_model_ready":
+      useChatStore.setState((current) => ({
+        busy: false,
+        cad: {
+          ...current.cad,
+          running: false,
+          result: message.result,
+          failure: null,
+          progress: [...current.cad.progress, {
+            stage: "converting" as const,
+            detail: message.result.source === "existing_model"
+              ? `verified existing model from ${message.result.sourceUrl ?? "an unlisted source"}`
+              : "MAC QA passed — model ready",
+            at: Date.now(),
+          }].slice(-CAD_PROGRESS_CAP),
+        },
+      }));
+      return;
+    case "cad_generation_failed":
+      useChatStore.setState((current) => ({
+        busy: false,
+        cad: {
+          ...current.cad,
+          running: false,
+          result: null,
+          failure: message.failure,
+          progress: [...current.cad.progress, {
+            stage: message.failure.stage, detail: message.failure.reason, at: Date.now(),
+          }].slice(-CAD_PROGRESS_CAP),
+        },
+      }));
+      return;
     case "error":
-      useChatStore.setState({ serverError: message.message, busy: false });
+      useChatStore.setState((current) => ({
+        serverError: message.message,
+        busy: false,
+        // "A turn is already running…" style protocol errors must unblock the CAD
+        // panel too, or a refused request would look like a run forever.
+        ...(current.cad.running ? { cad: { ...current.cad, running: false } } : {}),
+      }));
       return;
   }
 }

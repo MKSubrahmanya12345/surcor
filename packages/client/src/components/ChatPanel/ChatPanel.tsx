@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../../stores/useWorkspaceStore";
 import { CheckpointBar } from "../CheckpointBar/CheckpointBar";
 import { DiffReview } from "../DiffReview/DiffReview";
 import { PlanApproval } from "../PlanApproval/PlanApproval";
+import { CADPanel } from "../CADPanel/CADPanel";
 import { FOCUS_CHAT_EVENT } from "../CommandPalette/CommandPalette";
 import { renderMarkdown } from "./markdown";
 
@@ -13,6 +14,7 @@ const MODES: { id: AgentMode; label: string }[] = [
   { id: "ask", label: "Ask" },
   { id: "agent", label: "Agent" },
   { id: "plan", label: "Plan" },
+  { id: "cad", label: "CAD" },   // Prompt 7
 ];
 
 const toolSummary = (message: ChatMessage): string => {
@@ -188,6 +190,10 @@ export function ChatPanel() {
           <DiffReview />
           <CheckpointBar />
 
+          {/* Prompt 7: CAD mode lives in this panel — same slot, same composer,
+              different protocol message. Nothing above changes for Ask/Agent/Plan. */}
+          {mode === "cad" && <CADPanel />}
+
           {serverError && (
             <p className="chat-server-error" role="alert">
               <span>{serverError}</span>
@@ -212,7 +218,13 @@ export function ChatPanel() {
             <textarea
               ref={inputRef}
               className="chat-input"
-              placeholder={ready ? "Describe what you want Forge to do…" : "Waiting for the agent server…"}
+              placeholder={
+                !ready
+                  ? "Waiting for the agent server…"
+                  : mode === "cad"
+                    ? "e.g. arduino uno, standard wheel, wristwatch…"
+                    : "Describe what you want Forge to do…"
+              }
               value={draft}
               disabled={!ready}
               rows={3}

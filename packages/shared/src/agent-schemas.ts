@@ -36,6 +36,13 @@ export const clientMessageSchema: z.ZodType<ClientMessage> = z.discriminatedUnio
   // --- Prompt 6 variants (appended; existing variants unchanged) ---
   z.strictObject({ type: z.literal("mcp_status_request") }),
   z.strictObject({ type: z.literal("mcp_reload") }),
+  // --- Prompt 7 variant (appended; existing variants unchanged) ---
+  // CAD mode deliberately does not ride on `user_message`: a text-to-model run
+  // is not an agent turn, and the provider's tool loop must never see it.
+  z.strictObject({
+    type: z.literal("cad_generate"),
+    prompt: z.string().min(1).max(4_000).refine((value) => value.trim().length > 0),
+  }),
 ]);
 
 export const readFileArgsSchema: z.ZodType<ReadFileArgs> = z.strictObject({
@@ -77,4 +84,14 @@ export const searchCodebaseArgsSchema: z.ZodType<SearchCodebaseArgs> = z.strictO
 export const webSearchArgsSchema: z.ZodType<WebSearchArgs> = z.strictObject({
   query: z.string().min(1).max(500).refine((value) => value.trim().length > 0),
   maxResults: z.number().int().min(1).max(10).optional(),
+});
+
+// --- Prompt 7: CAD mode -------------------------------------------------
+// Appended below the Prompt 5 schemas; no existing schema was changed. A CAD
+// request is one object name/description sentence — MAC's Spec Planner turns it
+// into a CADBrief, so the ceiling is generous but bounded (a pasted manual is a
+// prompt-injection vector against a pipeline that executes generated code).
+
+export const cadGenerateArgsSchema = z.strictObject({
+  prompt: z.string().min(1).max(4_000).refine((value) => value.trim().length > 0),
 });

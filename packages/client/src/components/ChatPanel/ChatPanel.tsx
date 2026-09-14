@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../../stores/useWorkspaceStore";
 import { CheckpointBar } from "../CheckpointBar/CheckpointBar";
 import { DiffReview } from "../DiffReview/DiffReview";
 import { PlanApproval } from "../PlanApproval/PlanApproval";
+import { FOCUS_CHAT_EVENT } from "../CommandPalette/CommandPalette";
 import { renderMarkdown } from "./markdown";
 
 const MODES: { id: AgentMode; label: string }[] = [
@@ -98,6 +99,13 @@ export function ChatPanel() {
     const element = listRef.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [messages, busy]);
+
+  // Ctrl/Cmd+L and the command palette's "Focus Chat Input" land here.
+  useEffect(() => {
+    const focusInput = () => inputRef.current?.focus();
+    window.addEventListener(FOCUS_CHAT_EVENT, focusInput);
+    return () => window.removeEventListener(FOCUS_CHAT_EVENT, focusInput);
+  }, []);
 
   const submit = (): void => {
     const text = draft.trim();

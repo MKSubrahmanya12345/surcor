@@ -308,3 +308,67 @@ kbd { min-width: 48px; padding: 2px 6px; border-radius: 3px; background: #2b2b2b
 .tree-menu-shortcut { flex: 0 0 auto; color: var(--foreground-muted); font-size: 11px; }
 .tree-menu-item.focused .tree-menu-shortcut { color: #dfe9f3; }
 .tree-menu-separator { height: 1px; margin: 4px 0; background: #454545; }
+
+/* ----------------------------------------------------------------------- */
+/* Prompt 6 — command palette / quick open + MCP settings panel            */
+/* ----------------------------------------------------------------------- */
+
+.palette-backdrop {
+  position: fixed; inset: 0; z-index: 60; display: flex; justify-content: center;
+  align-items: flex-start; padding-top: 72px; background: rgba(0, 0, 0, 0.35);
+}
+.palette {
+  width: min(560px, 90vw); background: var(--sidebar-bg); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5); overflow: hidden;
+  display: flex; flex-direction: column; max-height: 50vh;
+}
+.palette-input {
+  flex: 0 0 36px; padding: 0 12px; border: 0; outline: none; background: var(--editor-bg);
+  color: var(--foreground); font: 13px var(--font-ui); border-bottom: 1px solid var(--border);
+}
+.palette-list { overflow-y: auto; min-height: 0; padding: 4px 0; }
+.palette-empty { padding: 12px; color: var(--foreground-muted); font-size: 12px; line-height: 1.5; }
+.palette-item {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 6px 12px;
+  border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--foreground);
+}
+.palette-item.active { background: var(--selection); }
+.palette-item-primary { flex: 0 0 auto; }
+.palette-item-secondary {
+  flex: 1 1 auto; margin-left: auto; color: var(--foreground-muted); font-size: 11px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right;
+}
+
+.settings-panel { width: 100%; height: 100%; overflow-y: auto; padding-bottom: 16px; }
+.settings-note { margin: 8px 20px; color: var(--foreground-muted); font-size: 12px; line-height: 1.5; }
+.settings-note code { font-family: var(--font-mono); font-size: 11px; color: var(--foreground); }
+.settings-server-list { list-style: none; margin: 8px 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.settings-server { border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; }
+.settings-server-row { display: flex; align-items: center; gap: 8px; }
+.settings-server-name { font-weight: 600; }
+.settings-remove {
+  margin-left: auto; border: 1px solid var(--border); background: transparent; color: var(--foreground-muted);
+  border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px;
+}
+.settings-remove:hover { color: #f14c4c; border-color: #f14c4c; }
+.settings-server-command { margin-top: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--foreground-muted); word-break: break-all; }
+.settings-server-status { margin-top: 4px; font-size: 11px; color: var(--foreground-muted); }
+.settings-server-tools { margin-top: 2px; font-family: var(--font-mono); font-size: 10.5px; color: #6a9955; word-break: break-all; }
+.settings-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.settings-dot.connected { background: #23d18b; }
+.settings-dot.starting { background: #e5c07b; }
+.settings-dot.error { background: #f14c4c; }
+.settings-dot.stopped { background: #6e6e6e; }
+.settings-add { margin: 12px 20px 0; display: flex; flex-direction: column; gap: 6px; }
+.settings-add-title { margin: 0; font-size: 11px; color: var(--foreground-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.settings-input {
+  padding: 5px 8px; background: var(--editor-bg); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--foreground); font: 12px var(--font-ui); outline: none;
+}
+.settings-input:focus { border-color: var(--accent); }
+.settings-add-button {
+  align-self: flex-start; margin-top: 2px; padding: 5px 14px; border: 0; border-radius: 3px;
+  background: var(--accent); color: #ffffff; cursor: pointer; font-size: 12px;
+}
+.settings-add-button:hover { background: var(--accent-hover); }
+.settings-error { margin: 10px 20px 0; color: #f14c4c; font-size: 12px; line-height: 1.4; }

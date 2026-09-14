@@ -12,6 +12,8 @@ import { runAgentTurn } from "./agent/loop";
 import { initIndexService, startIndexing } from "./index/service";
 import { validateWorkspaceRoot } from "./tools/paths";
 import { configureWebSearch } from "./tools/webSearch";
+import { loadWorkspaceRules } from "./agent/rules";
+import { disposeMcpManager, initMcpManager, mcpStatuses, reloadMcpServers } from "./mcp/clientManager";
 
 export function startServer(config: AgentServerConfig = loadConfig()) {
   const provider = createProviderRouter(config);
@@ -27,6 +29,12 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
   const sessionsInUse = new Set<string>();
   const tasksInFlight = new Set<Promise<void>>();
   let shuttingDown = false;
+
+  // Prompt 6: MCP client — spawns every server in ~/.forge/mcp.json, registers
+  // its tools into the shared registry, and re-syncs when the file changes.
+  initMcpManager((message) => {
+    for (const socket of sockets) emit(socket, message);
+  });
 
   const emit = (socket: ServerWebSocket<AgentSocketState>, message: ServerMessage): void => {
     if (!socket.data.closed && socket.readyState === 1) socket.send(JSON.stringify(message));
@@ -89,6 +97,15 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
         state.session = session;
         // Background index build; progress goes to this console, never to the client.
         startIndexing(root);
+        // Prompt 6: read .forge/rules.md once per connection and cache it for
+        // agent/loop.ts to prepend to every system message of this session.
+        try {
+          const rules = await loadWorkspaceRules(root);
+          database.setSetting(`workspace_rules:${session.id}`, rules);
+        } catch (error) {
+          console.error(`[forge-agent] Could not load .forge/rules.md: ${error instanceof Error ? error.message : error}`);
+          database.setSetting(`workspace_rules:${session.id}`, null);
+        }
         const history = historyForClient(session.id);
         if (session.pendingPlanId && !history.some((message) => message.id === session.pendingPlanId)) {
           const plan = database.getMessage(session.id, session.pendingPlanId);
@@ -98,6 +115,17 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
           history, pendingDiffs: database.listPendingDiffs(session.id),
           ...(session.pendingPlanId ? { pendingPlanId: session.pendingPlanId } : {}) });
       } finally { state.initializing = false; }
+      return;
+    }
+    // Prompt 6: MCP status is server-global, not session-bound, so these work
+    // before init as well.
+    if (message.type === "mcp_status_request") {
+      emit(socket, { type: "mcp_status", servers: mcpStatuses() });
+      return;
+    }
+    if (message.type === "mcp_reload") {
+      const servers = await reloadMcpServers();
+      emit(socket, { type: "mcp_status", servers });
       return;
     }
     const session = state.session;
@@ -227,6 +255,7 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
     // Include turns from recently disconnected sockets until cancellation has
     // finished recording their tool results; never close SQLite underneath them.
     await Promise.allSettled([...tasksInFlight]);
+    await disposeMcpManager();
     database.close();
     process.removeListener("SIGINT", onSignal);
     process.removeListener("SIGTERM", onSignal);

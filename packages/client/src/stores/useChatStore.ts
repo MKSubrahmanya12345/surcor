@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   Checkpoint,
   DiffProposal,
+  McpServerStatus,
   ServerMessage,
   ToolResult,
 } from "@forge/shared";
@@ -90,6 +91,8 @@ interface ChatState {
   pendingPlanId: string | null;
   checkpoints: Checkpoint[];
   serverError: string | null;
+  /** Prompt 6: live MCP server states pushed by the agent server. */
+  mcpServers: McpServerStatus[];
   setMode: (mode: AgentMode) => void;
   sendMessage: (content: string) => void;
   cancelTurn: () => void;
@@ -137,6 +140,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   pendingPlanId: null,
   checkpoints: [],
   serverError: null,
+  mcpServers: [],
 
   setMode: (mode) => set({ mode }),
 
@@ -253,6 +257,12 @@ function handleServerMessage(message: ServerMessage): void {
         checkpoints: loadCheckpoints(message.workspaceRoot),
         serverError: null,
       });
+      // Prompt 6: the socket is initialized now, so the current MCP server
+      // states can be pulled once; later changes arrive as broadcasts.
+      agentSocket.send({ type: "mcp_status_request" });
+      return;
+    case "mcp_status":
+      useChatStore.setState({ mcpServers: message.servers });
       return;
     case "chat_chunk":
       useChatStore.setState((current) => {

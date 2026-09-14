@@ -6,6 +6,8 @@ import { registerFileSystemHandlers } from "./ipc/fileSystem";
 import { registerTerminalHandlers } from "./ipc/terminal";
 import { registerGitHandlers } from "./ipc/git";
 import { registerGitHubHandlers } from "./ipc/github";
+import { registerMcpHandlers } from "./ipc/mcp";
+import { ensureAgentServer, stopAgentServer } from "./agentServer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -57,6 +59,10 @@ app.whenReady().then(() => {
   registerTerminalHandlers();
   registerGitHandlers();
   registerGitHubHandlers();
+  registerMcpHandlers();
+  // Prompt 6: end users never start the backend manually; spawn it only when
+  // the health check says nothing is listening yet.
+  void ensureAgentServer();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -66,3 +72,6 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+// Only tear down servers WE spawned; a manually started server is untouched.
+app.on("before-quit", () => stopAgentServer());

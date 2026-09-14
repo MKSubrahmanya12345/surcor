@@ -1,7 +1,7 @@
 import { changedFileCount, useGitStore } from "../../stores/useGitStore";
 import { useUiStore, type SidebarView } from "../../stores/useUiStore";
 
-type IconName = "files" | "search" | "branch" | "extensions";
+type IconName = "files" | "search" | "branch" | "extensions" | "settings";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
@@ -9,6 +9,7 @@ function Icon({ name }: { name: IconName }) {
     search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></>,
     branch: <><circle cx="6" cy="5" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 7c3 0 3 6 7 6h1M18 8v3"/></>,
     extensions: <><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM17 13v8M13 17h8"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/><circle cx="12" cy="12" r="6.5"/></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -16,6 +17,7 @@ function Icon({ name }: { name: IconName }) {
 const VIEWS: { id: SidebarView; label: string; icon: IconName; hint: string }[] = [
   { id: "explorer", label: "Explorer", icon: "files", hint: "Explorer (Ctrl+Shift+E)" },
   { id: "source-control", label: "Source Control", icon: "branch", hint: "Source Control (Ctrl+Shift+G)" },
+  { id: "settings", label: "Settings", icon: "settings", hint: "Settings — MCP Servers" },
 ];
 
 export function ActivityBar() {

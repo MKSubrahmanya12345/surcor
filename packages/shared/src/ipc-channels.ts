@@ -33,4 +33,9 @@ export const IPC = {
   GITHUB_LIST_REPOS: "github:listRepos",
   GITHUB_STATUS: "github:status",
   GITHUB_SIGN_OUT: "github:signOut",
+
+  // MCP settings (Prompt 6): ~/.forge/mcp.json management from the Settings UI
+  MCP_LIST_SERVERS: "mcp:listServers",
+  MCP_ADD_SERVER: "mcp:addServer",
+  MCP_REMOVE_SERVER: "mcp:removeServer",
 } as const;

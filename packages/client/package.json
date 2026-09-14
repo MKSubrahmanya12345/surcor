@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "rebuild": "electron-rebuild -f -w node-pty"
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "dist": "electron-builder --publish never"
   },
   "dependencies": {
     "@forge/shared": "workspace:*",
@@ -34,6 +35,7 @@
     "electron-rebuild": "^3.2.9",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
-    "vite-plugin-electron": "^1.1.2"
+    "vite-plugin-electron": "^1.1.2",
+    "electron-builder": "^26.0.12"
   }
 }

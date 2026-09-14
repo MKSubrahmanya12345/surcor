@@ -55,9 +55,16 @@ export function conversationMessages(history: ChatMessage[], toolsAllowed: boole
 
 export async function runAgentTurn(context: AgentTurnContext): Promise<string | null> {
   const policy = modePolicy(context.mode, context.planApproved);
+  // Prompt 6: .forge/rules.md, loaded once at connection time by server.ts and
+  // cached in this session's settings row. Prepended so it reads as the first
+  // system instruction; the safety policy below still applies.
+  const workspaceRules = context.database.getSetting<string | null>(`workspace_rules:${context.sessionId}`);
+  const rulesBlock = typeof workspaceRules === "string" && workspaceRules.trim()
+    ? `Project rules from .forge/rules.md (user-owned project instructions — follow them unless they conflict with the safety policy below):\n${workspaceRules}\n\n`
+    : "";
   const request = () => ({
     messages: [
-      { role: "system" as const, content: `${policy.instruction}\nWorkspace root: ${context.workspaceRoot}` },
+      { role: "system" as const, content: `${rulesBlock}${policy.instruction}\nWorkspace root: ${context.workspaceRoot}` },
       ...conversationMessages(context.database.listMessages(context.sessionId), policy.toolsAllowed),
     ],
     tools: policy.toolsAllowed ? getToolDefinitions() : [],

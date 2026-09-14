@@ -1,0 +1,54 @@
+# Prompt 6, Part C — distribution config. Run via `bun run build` from the repo
+# root: it bundles the agent server (build:server), builds the renderer +
+# main/preload (vite), then packages installers for the host OS.
+appId: com.forge.editor
+productName: Forge
+copyright: Copyright © 2026
+
+directories:
+  output: release
+
+# The packaged app needs no signing to run locally; unsigned artifacts are
+# produced when no certificate env vars are set.
+files:
+  - package.json
+  - dist/**/*
+  - dist-electron/**/*
+
+# The Bun agent server, bundled to a single file by `bun run build:server`
+# (root package.json). Electron's agentServer.ts spawns `bun run server.js`
+# from this directory when no dev server is already listening on :4500.
+extraResources:
+  - from: ../server/dist
+    to: forge-server
+    filter:
+      - "**/*"
+
+electronLanguages:
+  - en
+  - en-US
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  category: Development
+  target:
+    - AppImage
+  artifactName: ${productName}-${version}.${ext}
+
+# Native modules (node-pty) are rebuilt for the Electron target automatically.
+npmRebuild: true

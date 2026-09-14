@@ -10,6 +10,7 @@ import {
   type GitHubRepo,
   type GitOperationResult,
   type GitStatusSummary,
+  type McpServerConfig,
   type TerminalSessionInfo,
 } from "@forge/shared";
 
@@ -65,6 +66,11 @@ export interface ForgeAPI {
   githubPollAuth: () => Promise<DeviceAuthState>;
   githubListRepos: () => Promise<{ ok: boolean; repos: GitHubRepo[]; message: string }>;
   githubSignOut: () => Promise<{ ok: boolean }>;
+
+  // --- MCP settings (Prompt 6): manage ~/.forge/mcp.json ---
+  mcpListServers: () => Promise<McpServerConfig[]>;
+  mcpAddServer: (options: { name: string; command: string; args?: string[]; env?: Record<string, string> }) => Promise<McpServerConfig[]>;
+  mcpRemoveServer: (options: { name: string }) => Promise<McpServerConfig[]>;
 }
 
 /** Subscribes to a main-process push channel and returns an unsubscribe fn. */
@@ -106,6 +112,10 @@ const api: ForgeAPI = {
   githubPollAuth: () => ipcRenderer.invoke(IPC.GITHUB_POLL_AUTH),
   githubListRepos: () => ipcRenderer.invoke(IPC.GITHUB_LIST_REPOS),
   githubSignOut: () => ipcRenderer.invoke(IPC.GITHUB_SIGN_OUT),
+
+  mcpListServers: () => ipcRenderer.invoke(IPC.MCP_LIST_SERVERS),
+  mcpAddServer: (options) => ipcRenderer.invoke(IPC.MCP_ADD_SERVER, options),
+  mcpRemoveServer: (options) => ipcRenderer.invoke(IPC.MCP_REMOVE_SERVER, options),
 };
 
 contextBridge.exposeInMainWorld("forge", api);

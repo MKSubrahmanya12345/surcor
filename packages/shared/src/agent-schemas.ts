@@ -33,6 +33,9 @@ export const clientMessageSchema: z.ZodType<ClientMessage> = z.discriminatedUnio
     sessionId: z.string().uuid().optional(),
   }),
   z.strictObject({ type: z.literal("approve_plan") }),
+  // --- Prompt 6 variants (appended; existing variants unchanged) ---
+  z.strictObject({ type: z.literal("mcp_status_request") }),
+  z.strictObject({ type: z.literal("mcp_reload") }),
 ]);
 
 export const readFileArgsSchema: z.ZodType<ReadFileArgs> = z.strictObject({

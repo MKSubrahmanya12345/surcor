@@ -10,6 +10,11 @@ bun run rebuild   # compiles node-pty against Electron's ABI (first run only)
 bun run dev
 ```
 
+> After pulling or merging, run `bun install` again — new dependencies are not installed
+> automatically, and a stale `node_modules` shows up as `Failed to resolve import
+> "@xterm/xterm/css/xterm.css"`, `Rolldown failed to resolve import "simple-git"`, and
+> `Cannot find package 'simple-git'` at startup.
+
 ## Build
 
 ```bash

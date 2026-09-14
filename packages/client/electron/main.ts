@@ -10,16 +10,15 @@ import { registerGitHubHandlers } from "./ipc/github";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
 
-// vite-plugin-electron names the bundle `preload.js` when vite runs from the
-// package root and `preload.mjs` when it runs from `src/`, so accept either —
-// a missing preload would silently leave `window.forge` undefined.
-const preloadPath = ["preload.js", "preload.mjs"]
-  .map((file) => path.join(__dirname, file))
-  .find((candidate) => existsSync(candidate));
+// The renderer is sandboxed, and Electron runs sandboxed preload scripts as
+// plain CommonJS — so vite.config.ts deliberately emits a CJS `preload.js`.
+// An ESM `preload.mjs` would be ignored at runtime and silently leave
+// `window.forge` undefined, hence the explicit `.js` requirement here.
+const preloadPath = path.join(__dirname, "preload.js");
 
-if (!preloadPath) {
+if (!existsSync(preloadPath)) {
   throw new Error(
-    `No preload bundle found next to ${__dirname}. Run \`bun run build\` from packages/client first.`,
+    `No CommonJS preload bundle at ${preloadPath}. Run \`bun run build\` from packages/client first.`,
   );
 }
 

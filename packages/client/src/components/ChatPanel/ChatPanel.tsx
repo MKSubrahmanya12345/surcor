@@ -22,7 +22,10 @@ const toolSummary = (message: ChatMessage): string => {
     ? args.path
     : typeof args.command === "string"
       ? args.command
-      : "";
+      // Search tools have no path/command: show what was searched for.
+      : typeof args.query === "string"
+        ? args.query
+        : "";
   return `used tool: ${call.name}${subject ? `(${subject})` : ""}`;
 };
 

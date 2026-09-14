@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
-  applyDiffArgsSchema, listDirArgsSchema, readFileArgsSchema, runTerminalCommandArgsSchema, writeFileArgsSchema,
+  applyDiffArgsSchema, listDirArgsSchema, readFileArgsSchema, runTerminalCommandArgsSchema,
+  searchCodebaseArgsSchema, webSearchArgsSchema, writeFileArgsSchema,
   type AgentToolContext, type RegisteredTool, type ToolCall, type ToolDefinition, type ToolHandler, type ToolResult,
 } from "@forge/shared";
 import { readFile } from "./readFile";
@@ -8,6 +9,8 @@ import { writeFile } from "./writeFile";
 import { listDir } from "./listDir";
 import { runTerminalCommand } from "./runTerminalCommand";
 import { applyDiff } from "./applyDiff";
+import { searchCodebase } from "./searchCodebase";
+import { webSearch } from "./webSearch";
 
 // One registry for built-ins and future indexing/MCP tools. No loop changes needed.
 export const toolRegistry = new Map<string, RegisteredTool>();
@@ -27,6 +30,11 @@ registerTool({ name: "write_file", description: "Create or overwrite a workspace
 registerTool({ name: "list_dir", description: "List immediate files and directories in a workspace directory. Defaults to the workspace root.", parameters: parameters(listDirArgsSchema) }, listDir);
 registerTool({ name: "run_terminal_command", description: "Run a one-shot shell command (sh on Unix, cmd on Windows). cwd is workspace-relative, not an OS sandbox. Output is streamed and capped; timeoutMs cannot exceed the configured command timeout.", parameters: parameters(runTerminalCommandArgsSchema) }, runTerminalCommand);
 registerTool({ name: "apply_diff", description: "Propose full replacement content for a workspace file, not a unified patch. Saves a pending diff for human review; NEVER writes the file. Supply originalContent for a stale-read check. Do not treat pending proposals as applied or bypass review with write_file/terminal.", parameters: parameters(applyDiffArgsSchema) }, applyDiff);
+
+// Prompt 5: codebase awareness and live web access. Same registry, same
+// generic dispatch in agent/loop.ts — nothing else had to change.
+registerTool({ name: "search_codebase", description: "Semantic search over the indexed workspace. Returns the most relevant code chunks with workspace-relative paths, line ranges and similarity scores. Use this FIRST to locate code by meaning (for example \"where is the WebSocket connection set up\") instead of guessing paths, then read_file for full context. pathPrefix narrows to a subtree; topK defaults to 6.", parameters: parameters(searchCodebaseArgsSchema) }, searchCodebase);
+registerTool({ name: "web_search", description: "Search the live web (Tavily, falling back to Brave). Use for anything that must be current or is newer than the model's training data: library/tool versions, changelogs, API references, error messages. Returns titles, snippets and URLs; cite the URLs you rely on.", parameters: parameters(webSearchArgsSchema) }, webSearch);
 
 export function getToolDefinitions(): ToolDefinition[] {
   return [...toolRegistry.values()].map((tool) => tool.definition);

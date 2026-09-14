@@ -119,3 +119,73 @@ The Cursor-style chat experience, mounted in Prompt 1's `#panel-right-slot`:
   undo concept). "Restore to before last change" writes the snapshot back to disk via
   `fs:writeFile` and refreshes the open tabs.
 - `packages/shared` was **not** modified — Prompt 3's protocol already covered every message shape.
+
+## Prompt 5 — codebase indexing, web search, Bedrock, explorer file ops
+
+### Semantic codebase search (`search_codebase`)
+
+- `packages/server/src/index/` — chunker, gitignore-style matcher, embedder, SQLite store, indexer,
+  cosine-similarity search, and a module-level index service the tools reach through.
+- Files are split on blank-line blocks up to a token budget (no tree-sitter, no new dependency),
+  embedded with **Ollama `nomic-embed-text`** by default — `EMBEDDING_PROVIDER=openai` switches to
+  `text-embedding-3-small` — and stored in the **same SQLite database** as Prompt 3 (`embeddings`
+  and `indexed_files` tables added by a migration; there is still exactly one DB file).
+- Vectors are cached in memory as `Float32Array` and scored with a linear dot-product scan: a few
+  thousand chunks answer in single-digit milliseconds with no native vector index.
+- The index is built when a workspace is opened and kept current: every `write_file` tool call
+  re-indexes that one file, and `ensureFresh()` stat-walks the tree so edits made in the editor —
+  which never pass through the server — are picked up before a search runs.
+- Respects `.gitignore`, `.forgeignore`, nested ignore files, binary extensions, lock files, and
+  minified bundles. `path_prefix` narrows a search to a subtree.
+
+### Web search (`web_search`)
+
+- **Tavily** first (`TAVILY_API_KEY`), falling back to **Brave Search** (`BRAVE_SEARCH_API_KEY`).
+  With neither key configured the tool says so instead of failing silently.
+- Results are normalised to `{ title, url, snippet, score? }` and trimmed to a character budget so
+  one search cannot blow up the context window.
+- The chat panel's collapsed tool line shows the query for `web_search` / `search_codebase`.
+
+### Amazon Bedrock provider
+
+- `providers/bedrock.ts`, with `providers/aws/{sigv4,credentials,eventStream}.ts` underneath it —
+  the **Converse API** (`ConverseStream`), registered as a fifth provider choice next to
+  anthropic/openai/gemini/ollama (`PROVIDER_ORDER=anthropic,bedrock,…`).
+- Decodes AWS's `application/vnd.amazon.eventstream` binary framing (it is *not* SSE) into the same
+  stream-event shape the router already consumes; tool use, system prompts and stop reasons map
+  onto the shared provider interface.
+- Auth: SigV4 with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (+ optional session token), or a
+  bearer token via `AWS_BEARER_TOKEN_BEDROCK`, or the ambient credential chain.
+
+### Configuration
+
+`packages/server/.env.example` and `packages/client/.env.example` document every variable — server
+port/token, each provider, Bedrock's three auth options, agent limits, indexing, web search, client
+endpoints, and the GitHub device flow. Copy to `.env` and fill in what you need.
+
+### Explorer file operations
+
+The main process has had `fs:createFile`, `fs:rename` and `fs:deleteFile` since Prompt 1 — the tree
+simply had no UI for them. Now it does:
+
+- Toolbar on the EXPLORER header: **New File**, **New Folder**, **Refresh**, **Collapse Folders**.
+  They act on the selected folder (or the workspace root when nothing is selected).
+- Right-click context menu on files, folders and empty space: New File/Folder, Expand/Collapse,
+  Rename, Delete, Copy Path, Copy Relative Path.
+- Inline name input, VS Code-style — renaming a file pre-selects the name without its extension,
+  <kbd>Enter</kbd> commits, <kbd>Esc</kbd> cancels. Nested names (`src/components/New.tsx`) create
+  the missing folders on the way down.
+- Selection plus <kbd>F2</kbd> (rename) and <kbd>Del</kbd> (delete, with a confirmation) on the
+  focused tree.
+- Open tabs follow the file system: a renamed or moved file keeps its tab, deleting a folder closes
+  every tab inside it, and a refresh re-reads the visible tree without collapsing it.
+- `fs:createFile` now creates missing parents, refuses to overwrite an existing file (`wx`), and
+  every handler reports readable messages (`"x.ts" already exists.`) instead of raw errno codes.
+- All tree logic lives in `components/FileTree/treeOps.ts`: pure, Windows-aware path helpers with
+  no React and no store in them, so they are unit-testable and the component stays about rendering.
+
+### Tests
+
+`tests/prompt5/` — tree ops, the workspace store's create/rename/delete bookkeeping against an
+in-memory file system, the chunker, the ignore matcher, the search maths, and the file-system IPC
+handlers against a real temporary directory. Run everything with `bun test`.

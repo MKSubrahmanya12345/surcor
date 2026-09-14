@@ -281,3 +281,30 @@ kbd { min-width: 48px; padding: 2px 6px; border-radius: 3px; background: #2b2b2b
 .chat-send-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chat-hint { flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--foreground-muted); }
 .chat-send { flex: 0 0 auto; width: auto; padding: 4px 18px; }
+
+/* explorer: header toolbar + inline editing (create / rename) */
+.explorer-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-right: 8px; }
+.explorer-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 1px; }
+.tree-action { width: 22px; height: 22px; padding: 3px; border: 0; border-radius: 3px; background: transparent; color: #c5c5c5; cursor: pointer; }
+.tree-action:hover { background: var(--selection); color: #ffffff; }
+.tree-action svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tree:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.tree-row.selected { background: var(--selection); }
+.tree-row.selected:hover { background: #3f4348; }
+.tree-row.editing { cursor: text; }
+.tree-row.editing:hover { background: transparent; }
+.tree-input { flex: 1 1 auto; min-width: 0; height: 18px; padding: 0 3px; border: 1px solid var(--accent); border-radius: 2px; background: #3c3c3c; color: var(--foreground); font: 12px var(--font-ui); user-select: text; }
+.tree-input:focus { outline: none; }
+.tree-empty-hint { margin: 4px 0 0; padding: 0 20px; color: var(--foreground-muted); font-size: 12px; line-height: 1.45; }
+
+/* explorer: right-click context menu (fixed layer, clamped to the viewport) */
+.tree-context-menu { position: fixed; z-index: 60; min-width: 190px; padding: 4px 0; border: 1px solid #454545; border-radius: 4px; background: #1f1f1f; box-shadow: 0 4px 14px rgba(0, 0, 0, .5); font-size: 12px; }
+.tree-menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 12px; border: 0; background: transparent; color: var(--foreground); text-align: left; cursor: default; }
+.tree-menu-item.focused { background: var(--accent); color: #ffffff; }
+.tree-menu-item.danger.focused { background: #a1260d; }
+.tree-menu-item:disabled { opacity: .45; }
+.tree-menu-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-menu-shortcut { flex: 0 0 auto; color: var(--foreground-muted); font-size: 11px; }
+.tree-menu-item.focused .tree-menu-shortcut { color: #dfe9f3; }
+.tree-menu-separator { height: 1px; margin: 4px 0; background: #454545; }

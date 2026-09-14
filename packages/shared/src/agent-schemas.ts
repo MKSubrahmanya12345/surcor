@@ -5,6 +5,8 @@ import type {
   ListDirArgs,
   ReadFileArgs,
   RunTerminalCommandArgs,
+  SearchCodebaseArgs,
+  WebSearchArgs,
   WriteFileArgs,
 } from "./types";
 
@@ -58,4 +60,18 @@ export const applyDiffArgsSchema: z.ZodType<ApplyDiffArgs> = z.strictObject({
   path: pathSchema,
   proposedContent: z.string().max(1_048_576),
   originalContent: z.string().max(1_048_576).optional(),
+});
+
+// --- Prompt 5: codebase search + web search tool arguments -----------------
+// Appended below the Prompt 3 schemas; no existing schema was changed.
+
+export const searchCodebaseArgsSchema: z.ZodType<SearchCodebaseArgs> = z.strictObject({
+  query: z.string().min(1).max(2_000).refine((value) => value.trim().length > 0),
+  topK: z.number().int().min(1).max(25).optional(),
+  pathPrefix: pathSchema.optional(),
+});
+
+export const webSearchArgsSchema: z.ZodType<WebSearchArgs> = z.strictObject({
+  query: z.string().min(1).max(500).refine((value) => value.trim().length > 0),
+  maxResults: z.number().int().min(1).max(10).optional(),
 });

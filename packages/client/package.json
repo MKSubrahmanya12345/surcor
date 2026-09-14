@@ -12,28 +12,28 @@
   },
   "dependencies": {
     "@forge/shared": "workspace:*",
-    "@monaco-editor/react": "latest",
+    "@monaco-editor/react": "^4.7.0",
     "@octokit/auth-oauth-device": "^8.0.5",
     "@octokit/rest": "^22.0.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
-    "monaco-editor": "latest",
+    "monaco-editor": "^0.56.0",
     "node-pty": "^1.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "simple-git": "^3.36.0",
-    "zod": "latest",
-    "zustand": "latest"
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@types/node": "latest",
+    "@types/node": "^26.5.1",
     "@types/react": "18.3.24",
     "@types/react-dom": "18.3.7",
-    "@vitejs/plugin-react": "5.0.2",
-    "electron": "latest",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.3.0",
     "electron-rebuild": "^3.2.9",
-    "typescript": "latest",
-    "vite": "latest",
-    "vite-plugin-electron": "latest"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-electron": "^1.1.2"
   }
 }

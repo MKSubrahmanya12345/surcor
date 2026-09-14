@@ -31,6 +31,30 @@ export function argumentsObject(value: unknown): Record<string, unknown> {
 
 export function callId(): string { return `call_${crypto.randomUUID().replaceAll("-", "")}`; }
 
+export interface LinkedSignal {
+  signal: AbortSignal;
+  dispose: () => void;
+}
+
+/**
+ * Combine an optional caller signal with a timeout. Used by the embedding and
+ * web-search clients, which are outside the provider router's own timeout.
+ */
+export function linkAbortSignal(parent: AbortSignal | undefined, timeoutMs: number, label: string): LinkedSignal {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`${label} timed out after ${timeoutMs} ms.`)), timeoutMs);
+  const onAbort = (): void => controller.abort(parent?.reason);
+  parent?.addEventListener("abort", onAbort, { once: true });
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      parent?.removeEventListener("abort", onAbort);
+      controller.abort();
+    },
+  };
+}
+
 export async function post(url: string, body: unknown, headers: Record<string, string>, signal?: AbortSignal): Promise<Response> {
   const response = await fetch(url, {
     method: "POST", headers: { "content-type": "application/json", ...headers },

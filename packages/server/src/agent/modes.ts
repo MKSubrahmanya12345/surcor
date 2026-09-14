@@ -17,6 +17,7 @@ export function modePolicy(mode: AgentMode, planApproved = false): AgentModePoli
   return {
     toolsAllowed: true, requiresPlan: false,
     instruction: `${common}\n${mode === "plan" ? "The user explicitly approved the numbered plan. Execute it." : "AGENT MODE: Use tools to complete the user's request."}
+Use search_codebase to locate relevant code by meaning before guessing file paths, and web_search for current facts (versions, changelogs, docs) instead of relying on training data.
 Inspect existing files before changing them. Use write_file for creating files; prefer apply_diff for changes to existing files.
 apply_diff only saves a proposal: wait for client review and never bypass a pending review using write_file or a terminal command.
 Use run_terminal_command for one-shot commands, not persistent servers. It runs with the user's OS permissions, not in a sandbox.

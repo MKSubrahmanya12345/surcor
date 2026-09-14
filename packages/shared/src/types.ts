@@ -204,7 +204,9 @@ export interface GitHubAuthStatus {
 // Agent server (Prompt 3). Canonical contracts, including provider/tool APIs.
 // ---------------------------------------------------------------------------
 
-export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama";
+// "bedrock" is an APPENDED union member (Amazon Bedrock Converse API). Every
+// previously valid ProviderName value remains valid and unchanged.
+export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama" | "bedrock";
 export type TerminalOutputStream = "stdout" | "stderr";
 
 export interface ProviderToolCall extends ToolCall {
@@ -277,6 +279,10 @@ export interface AgentServerConfig {
   commandTimeoutMs: number;
   maxFileBytes: number;
   maxOutputBytes: number;
+  // Appended with Prompt 5: Amazon Bedrock (Converse), codebase indexing, web search.
+  bedrock: BedrockConfig;
+  index: IndexConfig;
+  webSearch: WebSearchConfig;
 }
 
 export interface AgentSession {
@@ -387,4 +393,169 @@ export interface AgentSocketState {
   activeTask: Promise<void> | null;
   queue: Promise<void>;
   queuedMessages: number;
+}
+
+// ---------------------------------------------------------------------------
+// Amazon Bedrock (added with Prompt 5). ProviderName is widened by APPENDING a
+// member — no existing member was renamed or removed, so every existing
+// `ProviderName` value stays valid.
+// ---------------------------------------------------------------------------
+
+export interface BedrockCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
+  sessionToken?: string;
+  /** Epoch ms after which these credentials must be resolved again. */
+  expiresAt?: number;
+}
+
+export interface BedrockConfig {
+  region: string;
+  model: string;               // inference profile id, model id, or profile ARN
+  baseUrl: string;             // https://bedrock-runtime.{region}.amazonaws.com
+  streaming: boolean;          // false => non-streaming POST /model/{id}/converse
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  sessionToken?: string;
+  /** AWS_BEARER_TOKEN_BEDROCK: skips SigV4 entirely when present. */
+  bearerToken?: string;
+  /** Shared-credentials profile used when no static keys are configured. */
+  profile?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Codebase indexing + semantic search (Prompt 5)
+// ---------------------------------------------------------------------------
+
+export interface CodeChunk {
+  id: string;                  // stable: `${workspaceId}:${relativePath}:${startLine}`
+  relativePath: string;        // workspace-relative, "/" separated
+  absolutePath: string;
+  startLine: number;           // 1-based, inclusive
+  endLine: number;             // 1-based, inclusive
+  language: string;            // monaco language id
+  content: string;
+  tokenEstimate: number;
+}
+
+export interface SearchResult {
+  score: number;               // cosine similarity, -1..1 (0..1 in practice)
+  relativePath: string;
+  absolutePath: string;
+  startLine: number;
+  endLine: number;
+  language: string;
+  snippet: string;
+}
+
+export interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  score?: number;
+  publishedDate?: string;
+}
+
+export interface WebSearchResponse {
+  provider: "tavily" | "brave";
+  query: string;
+  answer?: string;             // Tavily's synthesized answer, when requested
+  results: WebSearchResult[];
+}
+
+export interface SearchCodebaseArgs {
+  query: string;
+  topK?: number;
+  pathPrefix?: string;         // restrict matches to this workspace-relative subtree
+}
+
+export interface WebSearchArgs {
+  query: string;
+  maxResults?: number;
+}
+
+export type IndexStatus = "idle" | "indexing" | "ready" | "error";
+
+export interface IndexStats {
+  workspaceRoot: string;
+  status: IndexStatus;
+  files: number;
+  chunks: number;
+  skipped: number;             // ignored / binary / oversize files
+  model: string | null;        // embedding model the stored vectors came from
+  dimensions: number | null;
+  provider: string | null;     // "ollama" | "openai"
+  lastBuildAt: number | null;
+  lastError: string | null;
+}
+
+export type EmbeddingKind = "document" | "query";
+
+export interface EmbeddingRequest {
+  texts: string[];
+  kind: EmbeddingKind;
+  signal?: AbortSignal;
+}
+
+export interface EmbeddingProvider {
+  name: "ollama" | "openai";
+  model: string;
+  embed(request: EmbeddingRequest): Promise<number[][]>;
+}
+
+export interface IndexConfig {
+  enabled: boolean;
+  maxFiles: number;
+  maxFileBytes: number;
+  maxChunkTokens: number;
+  maxDepth: number;
+  batchSize: number;
+  embeddingOrder: ("ollama" | "openai")[];
+  ollama: { baseUrl: string; model: string };
+  openai: { baseUrl: string; model: string; apiKey?: string };
+  requestTimeoutMs: number;
+}
+
+export interface WebSearchConfig {
+  tavilyApiKey?: string;
+  tavilyBaseUrl: string;
+  braveApiKey?: string;
+  braveBaseUrl: string;
+  requestTimeoutMs: number;
+  defaultMaxResults: number;
+}
+
+export interface StoredIndexWorkspace {
+  id: string;
+  workspaceRoot: string;
+  model: string | null;
+  dimensions: number | null;
+  status: IndexStatus;
+  files: number;
+  chunks: number;
+  lastBuildAt: number | null;
+  lastError: string | null;
+}
+
+export interface StoredIndexFile {
+  relativePath: string;
+  absolutePath: string;
+  size: number;
+  mtimeMs: number;
+  chunks: number;
+  indexedAt: number;
+}
+
+export interface StoredEmbedding {
+  id: string;
+  relativePath: string;
+  absolutePath: string;
+  startLine: number;
+  endLine: number;
+  language: string;
+  content: string;
+  vectorJson: string;
+  model: string;
+  dimensions: number;
+  indexedAt: number;
 }

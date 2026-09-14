@@ -9,11 +9,17 @@ import { loadConfig } from "./config";
 import { ForgeDatabase } from "./db/client";
 import { createProviderRouter } from "./providers/router";
 import { runAgentTurn } from "./agent/loop";
+import { initIndexService, startIndexing } from "./index/service";
 import { validateWorkspaceRoot } from "./tools/paths";
+import { configureWebSearch } from "./tools/webSearch";
 
 export function startServer(config: AgentServerConfig = loadConfig()) {
   const provider = createProviderRouter(config);
   const database = new ForgeDatabase(config.databasePath);
+  // Prompt 5: codebase index lives in the same SQLite file (schema.sql creates
+  // the embeddings/index tables on boot). Tools reach it through index/service.
+  initIndexService(database.sqlite, config);
+  configureWebSearch(config.webSearch);
   // Persist only non-secret settings. Keys/tokens are read from the environment.
   database.setSetting("provider_order", config.providerOrder);
   database.setSetting("agent_max_turns", config.maxTurns);
@@ -81,6 +87,8 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
         if (sessionsInUse.has(session.id)) throw new Error("Session is already connected in another window.");
         sessionsInUse.add(session.id);
         state.session = session;
+        // Background index build; progress goes to this console, never to the client.
+        startIndexing(root);
         const history = historyForClient(session.id);
         if (session.pendingPlanId && !history.some((message) => message.id === session.pendingPlanId)) {
           const plan = database.getMessage(session.id, session.pendingPlanId);

@@ -5,6 +5,7 @@ import { AnthropicProvider } from "./anthropic";
 import { OpenAIProvider } from "./openai";
 import { GeminiProvider } from "./gemini";
 import { OllamaProvider } from "./ollama";
+import { BedrockProvider, bedrockAvailable } from "./bedrock";
 import { consumeCompletion, ProviderHttpError } from "./http";
 
 export class ProviderRouter implements ProviderAdapter {
@@ -60,14 +61,23 @@ export class ProviderRouter implements ProviderAdapter {
   }
 }
 
+/** Is a provider usable right now? Ollama needs no key, Bedrock uses SigV4/AWS
+ *  credentials instead of one, everything else needs an API key. */
+export function isProviderConfigured(config: AgentServerConfig, name: ProviderName): boolean {
+  if (name === "ollama") return true;
+  if (name === "bedrock") return bedrockAvailable(config.bedrock);
+  return Boolean(config.providers[name].apiKey);
+}
+
 export function createProviderRouter(config: AgentServerConfig): ProviderRouter {
   const providers: Record<ProviderName, ProviderAdapter> = {
     anthropic: new AnthropicProvider(config.providers.anthropic),
     openai: new OpenAIProvider(config.providers.openai),
     gemini: new GeminiProvider(config.providers.gemini),
     ollama: new OllamaProvider(config.providers.ollama),
+    bedrock: new BedrockProvider(config.bedrock),
   };
-  const active = config.providerOrder.filter((name) => name === "ollama" || Boolean(config.providers[name].apiKey));
+  const active = config.providerOrder.filter((name) => isProviderConfigured(config, name));
   console.info(`[providers] Priority: ${active.join(" -> ") || "none"}`);
   return new ProviderRouter(active.map((name) => providers[name]), config.providerTimeoutMs);
 }

@@ -4,6 +4,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUiStore } from "../../stores/useUiStore";
 import { useWorkspaceStore } from "../../stores/useWorkspaceStore";
+import { NEW_TERMINAL_EVENT } from "../CommandPalette/CommandPalette";
 
 interface Session {
   id: string;
@@ -171,6 +172,14 @@ export function Terminal() {
     if (activeId !== null && sessions.some((session) => session.id === activeId)) return;
     setActiveId(last);
   }, [activeId, sessions]);
+
+  // Command palette's "New Terminal" action dispatches through here, reusing
+  // the exact same spawn path as the panel's own "+" button.
+  useEffect(() => {
+    const onNewTerminal = () => { void createSession(); };
+    window.addEventListener(NEW_TERMINAL_EVENT, onNewTerminal);
+    return () => window.removeEventListener(NEW_TERMINAL_EVENT, onNewTerminal);
+  }, [createSession]);
 
   // one terminal to start with
   useEffect(() => {

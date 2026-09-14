@@ -21,6 +21,13 @@ bun run dev
 bun run build
 ```
 
+This bundles the agent server to a single file (`packages/server/dist/server.js`
+via `bun build --target bun`), builds the Electron client with Vite, and then
+packages installers with electron-builder (`.dmg` on macOS, NSIS `.exe` on
+Windows, AppImage on Linux — `packages/client/electron-builder.yml`, output in
+`packages/client/release/`). The packaged app auto-starts the agent server; no
+manual `bun run` of the backend is required (Bun must be on PATH).
+
 ## Tests
 
 ```bash
@@ -189,3 +196,42 @@ simply had no UI for them. Now it does:
 `tests/prompt5/` — tree ops, the workspace store's create/rename/delete bookkeeping against an
 in-memory file system, the chunker, the ignore matcher, the search maths, and the file-system IPC
 handlers against a real temporary directory. Run everything with `bun test`.
+## Prompt 6 — MCP client, command palette & keybindings, project rules, packaging
+
+### MCP servers (external tools)
+
+Drop entries into `~/.forge/mcp.json` (same shape as Claude Desktop / Cursor) or
+use the Settings panel (gear icon in the activity bar) to add/remove them
+without hand-editing JSON. The agent server spawns each configured stdio MCP
+server, calls `tools/list`, and registers every tool into the same registry as
+the built-ins, namespaced `mcp__<server>__<tool>` — the chat UI renders them
+exactly like built-in tool calls. Config edits are picked up automatically
+(file watcher + `mcp_reload`), and the Settings panel shows live connection
+state and the registered tool names per server. The stdio transport
+(JSON-RPC 2.0 with `Content-Length` framing: `initialize`, `notifications/initialized`,
+`tools/list`, `tools/call`) is implemented dependency-free in
+`packages/server/src/mcp/clientManager.ts`; the wire format is identical to the
+official SDK's StdioClientTransport, so existing configs work unchanged.
+
+### Command palette & keybindings
+
+- `Cmd/Ctrl+Shift+P` — command palette (Open Folder, Toggle Terminal, Toggle
+  Chat Panel, Switch Agent Mode, New Terminal, Clone Repository, …), fuzzy search.
+- `Cmd/Ctrl+P` — quick file open (type `>` to switch into command mode).
+- `Cmd/Ctrl+`` ` — toggle terminal · `Cmd/Ctrl+B` — toggle file tree ·
+  `Cmd/Ctrl+L` — focus chat (Cursor's default).
+
+### Project rules (`.forge/rules.md`)
+
+If `<workspace>/.forge/rules.md` exists, its contents are read once at
+connection time and prepended to the system message of every conversation
+(Cursor's `.cursor/rules` equivalent). Test: write "Always respond in French"
+and the agent does.
+
+### Packaging & auto-start
+
+See **Build** above. On launch the Electron main process health-checks
+`ws://localhost:4500`; only when nothing answers does it spawn
+`bun run packages/server/src/server.ts` (dev) or the bundled
+`forge-server/server.js` resource (packaged). It never kills a server it did
+not spawn, and `FORGE_SERVER_EXTERNAL=1` disables auto-start entirely.

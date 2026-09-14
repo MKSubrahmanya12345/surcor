@@ -7,3 +7,4 @@ packages/client/src/dist-electron/
 .env
 .env.*
 !.env.example
+release/

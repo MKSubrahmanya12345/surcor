@@ -68,14 +68,19 @@ export type ServerMessage =
   // A failed streaming provider is replaced, not concatenated with its fallback.
   | { type: "chat_reset"; messageId: string }
   // Chunks are incremental; the existing tool_result is the final, complete result.
-  | { type: "tool_result_chunk"; result: ToolResult; stream: TerminalOutputStream };
+  | { type: "tool_result_chunk"; result: ToolResult; stream: TerminalOutputStream }
+  // Prompt 6: MCP server connection states, broadcast on change and on request.
+  | { type: "mcp_status"; servers: McpServerStatus[] };
 
 export type ClientMessage =
   | { type: "user_message"; content: string; mode: AgentMode }
   | { type: "diff_decision"; diffId: string; decision: "accept" | "reject" }
   | { type: "cancel" }
   | { type: "init"; workspaceRoot: string; sessionId?: string }
-  | { type: "approve_plan" };
+  | { type: "approve_plan" }
+  // Prompt 6: ask for the current MCP server states / re-read ~/.forge/mcp.json.
+  | { type: "mcp_status_request" }
+  | { type: "mcp_reload" };
 
 // ---------------------------------------------------------------------------
 // Terminal (Prompt 2)
@@ -558,4 +563,27 @@ export interface StoredEmbedding {
   model: string;
   dimensions: number;
   indexedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// MCP (Model Context Protocol) client (Prompt 6): external stdio tool servers
+// ---------------------------------------------------------------------------
+
+/** One entry in ~/.forge/mcp.json (same shape as Claude Desktop / Cursor). */
+export interface McpServerConfig {
+  name: string;                // unique key, becomes the tool namespace
+  command: string;             // executable spawned by the agent server
+  args: string[];
+  env?: Record<string, string>;
+}
+
+export type McpServerState = "starting" | "connected" | "error" | "stopped";
+
+/** Live connection state of one configured MCP server, reported by the agent server. */
+export interface McpServerStatus {
+  name: string;
+  state: McpServerState;
+  toolCount: number;           // tools registered as mcp__<name>__<tool>
+  toolNames: string[];
+  error?: string;
 }

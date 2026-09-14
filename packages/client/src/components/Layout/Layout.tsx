@@ -3,6 +3,7 @@ import { ActivityBar } from "../ActivityBar/ActivityBar";
 import { FileTree } from "../FileTree/FileTree";
 import { Editor } from "../Editor/Editor";
 import { SourceControl } from "../SourceControl/SourceControl";
+import { Settings } from "../Settings/Settings";
 import { StatusBar } from "../StatusBar/StatusBar";
 import { Terminal } from "../Terminal/Terminal";
 import { ChatPanel } from "../ChatPanel/ChatPanel";
@@ -11,6 +12,8 @@ import { useUiStore } from "../../stores/useUiStore";
 export function Layout() {
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const sidebarView = useUiStore((state) => state.sidebarView);
+  const sidebarVisible = useUiStore((state) => state.sidebarVisible);
+  const chatOpen = useUiStore((state) => state.chatOpen);
 
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -29,10 +32,18 @@ export function Layout() {
     <div className="app-shell">
       <div className="workbench">
         <ActivityBar />
-        <div className="sidebar" style={{ width: sidebarWidth }}>
-          {sidebarView === "source-control" ? <SourceControl /> : <FileTree />}
-        </div>
-        <div className="pane-resizer" onPointerDown={startResize} />
+        {sidebarVisible && (
+          <>
+            <div className="sidebar" style={{ width: sidebarWidth }}>
+              {sidebarView === "source-control"
+                ? <SourceControl />
+                : sidebarView === "settings"
+                  ? <Settings />
+                  : <FileTree />}
+            </div>
+            <div className="pane-resizer" onPointerDown={startResize} />
+          </>
+        )}
         <div className="center-stack">
           <Editor />
           {/* Prompt 2 mounts the terminal panel here; the slot collapses to
@@ -41,8 +52,9 @@ export function Layout() {
             <Terminal />
           </div>
         </div>
-        {/* Prompt 4 mounts the chat panel here (style flipped from "none"). */}
-        <div id="panel-right-slot" style={{ display: "flex" }}>
+        {/* Prompt 4 mounts the chat panel here (style flipped from "none");
+            Prompt 6 toggles it via the chatOpen UI state / Ctrl+L palette. */}
+        <div id="panel-right-slot" style={{ display: chatOpen ? "flex" : "none" }}>
           <ChatPanel />
         </div>
       </div>

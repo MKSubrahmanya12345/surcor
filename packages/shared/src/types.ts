@@ -62,12 +62,20 @@ export type ServerMessage =
   | { type: "tool_call"; toolCall: ToolCall }
   | { type: "tool_result"; result: ToolResult }
   | { type: "diff_proposed"; diff: DiffProposal }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "session_ready"; sessionId: string; workspaceRoot: string; history: ChatMessage[]; pendingPlanId?: string; pendingDiffs: DiffProposal[] }
+  | { type: "plan_ready"; messageId: string }
+  // A failed streaming provider is replaced, not concatenated with its fallback.
+  | { type: "chat_reset"; messageId: string }
+  // Chunks are incremental; the existing tool_result is the final, complete result.
+  | { type: "tool_result_chunk"; result: ToolResult; stream: TerminalOutputStream };
 
 export type ClientMessage =
   | { type: "user_message"; content: string; mode: AgentMode }
   | { type: "diff_decision"; diffId: string; decision: "accept" | "reject" }
-  | { type: "cancel" };
+  | { type: "cancel" }
+  | { type: "init"; workspaceRoot: string; sessionId?: string }
+  | { type: "approve_plan" };
 
 // ---------------------------------------------------------------------------
 // Terminal (Prompt 2)
@@ -190,4 +198,193 @@ export interface GitHubAuthStatus {
   connected: boolean;
   session: GitHubSession | null;
   clientIdConfigured: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Agent server (Prompt 3). Canonical contracts, including provider/tool APIs.
+// ---------------------------------------------------------------------------
+
+export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama";
+export type TerminalOutputStream = "stdout" | "stderr";
+
+export interface ProviderToolCall extends ToolCall {
+  // Gemini thinking models require this opaque signature on subsequent turns.
+  providerMetadata?: { geminiThoughtSignature?: string };
+}
+
+export interface ProviderMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  toolCalls?: ProviderToolCall[];
+  toolCallId?: string;
+  name?: string;
+}
+
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+export interface ProviderRequest {
+  messages: ProviderMessage[];
+  tools: ToolDefinition[];
+  signal?: AbortSignal;
+  maxTokens?: number;
+}
+
+export interface ProviderResponse {
+  content: string;
+  toolCalls: ProviderToolCall[];
+}
+
+export type ProviderStreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "reset" }
+  | { type: "complete"; response: ProviderResponse };
+
+export interface ProviderAdapter {
+  name: ProviderName | "router";
+  complete(request: ProviderRequest): Promise<ProviderResponse>;
+  streamComplete(request: ProviderRequest): AsyncIterable<ProviderStreamEvent>;
+}
+
+export interface ProviderConfig {
+  baseUrl: string;
+  model: string;
+  apiKey?: string;
+}
+
+export interface ProviderToolCallAccumulator {
+  id: string;
+  name: string;
+  argumentsJson: string;
+  initialArgs?: Record<string, unknown>;
+}
+
+export interface AgentServerConfig {
+  hostname: string;
+  port: number;
+  databasePath: string;
+  token?: string;
+  allowedOrigins: string[];
+  providerOrder: ProviderName[];
+  providers: Record<ProviderName, ProviderConfig>;
+  providerTimeoutMs: number;
+  maxTurns: number;
+  maxToolCallsPerTurn: number;
+  maxTokens: number;
+  commandTimeoutMs: number;
+  maxFileBytes: number;
+  maxOutputBytes: number;
+}
+
+export interface AgentSession {
+  id: string;
+  workspaceRoot: string;
+  pendingPlanId: string | null;
+}
+
+export interface StoredChatMessage {
+  id: string;
+  role: ChatMessage["role"];
+  content: string;
+  mode: AgentMode;
+  createdAt: number;
+  toolCallsJson: string | null;
+}
+
+export interface StoredDiffProposal extends DiffProposal {
+  sessionId: string;
+}
+
+export interface StoredSetting {
+  value: string;
+}
+
+export interface AgentDatabase {
+  openSession(workspaceRoot: string, sessionId?: string): AgentSession;
+  listMessages(sessionId: string, limit?: number): ChatMessage[];
+  getMessage(sessionId: string, messageId: string): ChatMessage | undefined;
+  appendMessage(sessionId: string, message: ChatMessage): void;
+  setPendingPlan(sessionId: string, messageId: string | null): void;
+  saveDiff(sessionId: string, diff: DiffProposal): void;
+  listPendingDiffs(sessionId: string): DiffProposal[];
+  decideDiff(sessionId: string, diffId: string, decision: "accept" | "reject"): DiffProposal;
+  getSetting<T>(key: string): T | undefined;
+  setSetting(key: string, value: unknown): void;
+  close(): void;
+}
+
+export interface AgentToolContext {
+  workspaceRoot: string;
+  sessionId: string;
+  database: AgentDatabase;
+  signal: AbortSignal;
+  emit: (message: ServerMessage) => void;
+  commandTimeoutMs: number;
+  maxFileBytes: number;
+  maxOutputBytes: number;
+}
+
+export type ToolHandler = (
+  call: ToolCall,
+  context: AgentToolContext,
+) => Promise<ToolResult>;
+
+export interface RegisteredTool {
+  definition: ToolDefinition;
+  handler: ToolHandler;
+}
+
+export interface ReadFileArgs {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+}
+
+export interface WriteFileArgs {
+  path: string;
+  content: string;
+}
+
+export interface ListDirArgs {
+  path?: string;
+}
+
+export interface RunTerminalCommandArgs {
+  command: string;
+  cwd?: string;
+  timeoutMs?: number;
+}
+
+export interface ApplyDiffArgs {
+  path: string;
+  proposedContent: string;
+  originalContent?: string;
+}
+
+export interface AgentModePolicy {
+  toolsAllowed: boolean;
+  requiresPlan: boolean;
+  instruction: string;
+}
+
+export interface AgentTurnContext extends AgentToolContext {
+  provider: ProviderAdapter;
+  mode: AgentMode;
+  planApproved: boolean;
+  maxTurns: number;
+  maxToolCallsPerTurn: number;
+  maxTokens: number;
+}
+
+export interface AgentSocketState {
+  session: AgentSession | null;
+  initializing: boolean;
+  closed: boolean;
+  activeTurn: AbortController | null;
+  activeTask: Promise<void> | null;
+  queue: Promise<void>;
+  queuedMessages: number;
 }

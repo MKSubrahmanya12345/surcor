@@ -1,0 +1,53 @@
+import { z } from "zod";
+import {
+  applyDiffArgsSchema, listDirArgsSchema, readFileArgsSchema, runTerminalCommandArgsSchema, writeFileArgsSchema,
+  type AgentToolContext, type RegisteredTool, type ToolCall, type ToolDefinition, type ToolHandler, type ToolResult,
+} from "@forge/shared";
+import { readFile } from "./readFile";
+import { writeFile } from "./writeFile";
+import { listDir } from "./listDir";
+import { runTerminalCommand } from "./runTerminalCommand";
+import { applyDiff } from "./applyDiff";
+
+// One registry for built-ins and future indexing/MCP tools. No loop changes needed.
+export const toolRegistry = new Map<string, RegisteredTool>();
+
+export function registerTool(definition: ToolDefinition, handler: ToolHandler): void {
+  if (toolRegistry.has(definition.name)) throw new Error(`Tool already registered: ${definition.name}`);
+  toolRegistry.set(definition.name, { definition, handler });
+}
+
+function parameters(schema: z.ZodType): Record<string, unknown> {
+  const { $schema: _version, ...json } = z.toJSONSchema(schema, { unrepresentable: "any" });
+  return json;
+}
+
+registerTool({ name: "read_file", description: "Read a UTF-8 workspace file. Optional startLine/endLine are inclusive and 1-based.", parameters: parameters(readFileArgsSchema) }, readFile);
+registerTool({ name: "write_file", description: "Create or overwrite a workspace file with exact UTF-8 content. Creates parent directories. Writes immediately; prefer apply_diff for reviewing changes to existing files.", parameters: parameters(writeFileArgsSchema) }, writeFile);
+registerTool({ name: "list_dir", description: "List immediate files and directories in a workspace directory. Defaults to the workspace root.", parameters: parameters(listDirArgsSchema) }, listDir);
+registerTool({ name: "run_terminal_command", description: "Run a one-shot shell command (sh on Unix, cmd on Windows). cwd is workspace-relative, not an OS sandbox. Output is streamed and capped; timeoutMs cannot exceed the configured command timeout.", parameters: parameters(runTerminalCommandArgsSchema) }, runTerminalCommand);
+registerTool({ name: "apply_diff", description: "Propose full replacement content for a workspace file, not a unified patch. Saves a pending diff for human review; NEVER writes the file. Supply originalContent for a stale-read check. Do not treat pending proposals as applied or bypass review with write_file/terminal.", parameters: parameters(applyDiffArgsSchema) }, applyDiff);
+
+export function getToolDefinitions(): ToolDefinition[] {
+  return [...toolRegistry.values()].map((tool) => tool.definition);
+}
+
+export async function executeTool(call: ToolCall, context: AgentToolContext): Promise<ToolResult> {
+  try {
+    context.signal.throwIfAborted();
+    const tool = toolRegistry.get(call.name);
+    if (!tool) throw new Error(`Unknown tool: ${call.name}`);
+    const result = await tool.handler(call, context);
+    if (Buffer.byteLength(result.output, "utf8") > context.maxOutputBytes) {
+      result.output = Buffer.from(result.output).subarray(0, context.maxOutputBytes).toString("utf8") + "\n[Output truncated; request a smaller range.]";
+    }
+    return result;
+  } catch (error) {
+    return {
+      toolCallId: call.id, ok: false, output: "",
+      error: context.signal.aborted ? "Tool execution cancelled." : error instanceof z.ZodError
+        ? `Invalid tool arguments: ${error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`
+        : error instanceof Error ? error.message : "Tool execution failed.",
+    };
+  }
+}

@@ -32,7 +32,7 @@ function createWindow(): void {
   if (process.env.VITE_DEV_SERVER_URL) {
     void mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    void mainWindow.loadFile(path.join(__dirname, "../../dist/index.html"));
+    void mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 }
 

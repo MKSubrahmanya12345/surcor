@@ -1,3 +1,6 @@
+import { changedFileCount, useGitStore } from "../../stores/useGitStore";
+import { useUiStore, type SidebarView } from "../../stores/useUiStore";
+
 type IconName = "files" | "search" | "branch" | "extensions";
 
 function Icon({ name }: { name: IconName }) {
@@ -10,13 +13,43 @@ function Icon({ name }: { name: IconName }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
+const VIEWS: { id: SidebarView; label: string; icon: IconName; hint: string }[] = [
+  { id: "explorer", label: "Explorer", icon: "files", hint: "Explorer (Ctrl+Shift+E)" },
+  { id: "source-control", label: "Source Control", icon: "branch", hint: "Source Control (Ctrl+Shift+G)" },
+];
+
 export function ActivityBar() {
+  const sidebarView = useUiStore((state) => state.sidebarView);
+  const setSidebarView = useUiStore((state) => state.setSidebarView);
+  const status = useGitStore((state) => state.status);
+  const changeCount = changedFileCount(status);
+
   return (
     <nav className="activity-bar" aria-label="Primary">
-      <button className="activity-button active" title="Explorer" aria-label="Explorer"><Icon name="files" /></button>
-      <button className="activity-button" title="Search (coming soon)" aria-label="Search"><Icon name="search" /></button>
-      <button className="activity-button" title="Source Control (coming soon)" aria-label="Source Control"><Icon name="branch" /></button>
-      <button className="activity-button" title="Extensions (coming soon)" aria-label="Extensions"><Icon name="extensions" /></button>
+      {VIEWS.map((view) => (
+        <button
+          key={view.id}
+          className={`activity-button ${sidebarView === view.id ? "active" : ""}`}
+          title={view.hint}
+          aria-label={view.label}
+          aria-pressed={sidebarView === view.id}
+          onClick={() => setSidebarView(view.id)}
+        >
+          <Icon name={view.icon} />
+          {view.id === "source-control" && changeCount > 0 && (
+            <span className="activity-badge" aria-label={`${changeCount} changed files`}>
+              {changeCount}
+            </span>
+          )}
+        </button>
+      ))}
+
+      <button className="activity-button" title="Search (coming soon)" aria-label="Search" disabled>
+        <Icon name="search" />
+      </button>
+      <button className="activity-button" title="Extensions (coming soon)" aria-label="Extensions" disabled>
+        <Icon name="extensions" />
+      </button>
     </nav>
   );
 }

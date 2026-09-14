@@ -7,14 +7,21 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "rebuild": "electron-rebuild -f -w node-pty"
   },
   "dependencies": {
     "@forge/shared": "workspace:*",
     "@monaco-editor/react": "latest",
+    "@octokit/auth-oauth-device": "^8.0.5",
+    "@octokit/rest": "^22.0.1",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "monaco-editor": "latest",
+    "node-pty": "^1.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "simple-git": "^3.36.0",
     "zod": "latest",
     "zustand": "latest"
   },
@@ -24,6 +31,7 @@
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.0.2",
     "electron": "latest",
+    "electron-rebuild": "^3.2.9",
     "typescript": "latest",
     "vite": "latest",
     "vite-plugin-electron": "latest"

@@ -1,0 +1,31 @@
+{
+  "name": "@forge/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/dist-electron/main.js",
+  "scripts": {
+    "dev": "vite --config src/vite.config.ts",
+    "build": "vite build --config src/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@forge/shared": "workspace:*",
+    "@monaco-editor/react": "latest",
+    "monaco-editor": "latest",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "18.3.24",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "5.0.2",
+    "electron": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vite-plugin-electron": "latest"
+  }
+}

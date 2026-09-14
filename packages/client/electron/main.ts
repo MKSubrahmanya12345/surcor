@@ -2,6 +2,9 @@ import { app, BrowserWindow, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerFileSystemHandlers } from "./ipc/fileSystem";
+import { registerTerminalHandlers } from "./ipc/terminal";
+import { registerGitHandlers } from "./ipc/git";
+import { registerGitHubHandlers } from "./ipc/github";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | null = null;
@@ -38,6 +41,9 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerFileSystemHandlers();
+  registerTerminalHandlers();
+  registerGitHandlers();
+  registerGitHubHandlers();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

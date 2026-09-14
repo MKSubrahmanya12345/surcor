@@ -77,3 +77,116 @@ kbd { min-width: 48px; padding: 2px 6px; border-radius: 3px; background: #2b2b2b
 #status-git-slot:empty { display: none; }
 .error-toast { position: fixed; z-index: 20; right: 18px; bottom: 40px; max-width: 480px; padding: 10px 10px 10px 14px; display: flex; align-items: center; gap: 14px; background: #3b2525; border: 1px solid #a44; box-shadow: 0 4px 18px #0009; }
 .error-toast button { border: 0; background: transparent; font-size: 18px; cursor: pointer; }
+
+/* ------------------------------------------------------------------ *
+ * Prompt 2 — Terminal panel, Source Control, GitHub, status bar git   *
+ * ------------------------------------------------------------------ */
+
+/* thin VS Code-style scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #424245; border: 2px solid transparent; background-clip: content-box; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #4f4f52; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* status bar: the portalled git indicator replaces Prompt 1's placeholder */
+#status-git-slot { display: flex; align-items: center; height: 100%; }
+#status-git-slot:not(:empty) + .branch-placeholder { display: none; }
+.status-git { cursor: pointer; text-transform: none; }
+
+.activity-badge { position: absolute; top: 8px; right: 6px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 10px; line-height: 17px; text-align: center; }
+.activity-button:disabled { opacity: .45; cursor: default; }
+
+/* bottom slot + terminal panel ------------------------------------- */
+#panel-bottom-slot { flex: 0 0 auto; min-height: 0; overflow: hidden; }
+.terminal-panel { display: flex; flex-direction: column; width: 100%; min-height: 0; overflow: hidden; background: var(--editor-bg); border-top: 1px solid var(--border); transition: height .08s ease-out; }
+.panel-resizer-horizontal { flex: 0 0 4px; height: 4px; background: transparent; cursor: row-resize; }
+.panel-resizer-horizontal:hover { background: var(--accent); }
+.terminal-header { flex: 0 0 35px; display: flex; align-items: center; justify-content: space-between; padding-right: 6px; background: var(--activity-bg); border-bottom: 1px solid #252525; }
+.terminal-tabs { display: flex; align-items: center; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+.terminal-tabs::-webkit-scrollbar { height: 3px; }
+.terminal-tab { display: flex; align-items: center; gap: 7px; height: 35px; padding: 0 8px 0 12px; border: 0; border-right: 1px solid #252525; background: transparent; color: #a7a7a7; cursor: default; white-space: nowrap; }
+.terminal-tab.active { background: var(--editor-bg); color: #e7e7e7; border-top: 1px solid var(--accent); }
+.terminal-tab-icon { color: #75beff; }
+.terminal-tab-close { width: 18px; height: 18px; display: grid; place-content: center; border-radius: 3px; font-size: 17px; opacity: 0; }
+.terminal-tab:hover .terminal-tab-close, .terminal-tab.active .terminal-tab-close { opacity: 1; }
+.terminal-tab-close:hover { background: #424242; }
+.terminal-actions { display: flex; align-items: center; gap: 2px; }
+.terminal-action { width: 28px; height: 28px; display: grid; place-content: center; border: 0; border-radius: 4px; background: transparent; color: #a7a7a7; font-size: 15px; cursor: pointer; }
+.terminal-action:hover:not(:disabled) { background: var(--hover); color: #fff; }
+.terminal-action:disabled { opacity: .4; cursor: default; }
+.terminal-error { margin: 0; padding: 8px 12px; background: #3b2525; color: #f48771; font-size: 12px; line-height: 1.4; }
+.terminal-body { flex: 1 1 auto; min-height: 0; position: relative; }
+.terminal-view { width: 100%; height: 100%; padding: 0 0 0 8px; }
+
+/* source control panel --------------------------------------------- */
+.scm-panel { width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--sidebar-bg); overflow: hidden; }
+.scm-panel-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 8px 0 20px; }
+.panel-title-actions { display: flex; align-items: center; gap: 2px; }
+.scm-empty { padding: 4px 20px; line-height: 1.5; }
+.scm-empty p { margin: 0 0 10px; }
+.scm-hint { margin: 0; padding: 0; color: var(--foreground-muted); font-size: 12px; line-height: 1.45; }
+.scm-commit-box { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
+.scm-message-input { width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 2px; background: #3c3c3c; color: var(--foreground); font: 12px var(--font-ui); resize: vertical; }
+.scm-message-input:focus { outline: none; border-color: var(--accent); }
+.scm-commit-actions { display: flex; gap: 6px; }
+.secondary-button { flex: 1 1 auto; padding: 5px 12px; border: 1px solid var(--border); border-radius: 2px; background: #3a3d41; color: var(--foreground); cursor: pointer; white-space: nowrap; }
+.secondary-button:hover:not(:disabled) { background: #45494e; }
+.secondary-button:disabled { opacity: .4; cursor: default; }
+.scm-sync-row { display: flex; align-items: center; gap: 6px; }
+.scm-sync-count { flex: 1 1 auto; color: var(--foreground-muted); font-size: 11px; }
+.scm-message { position: relative; margin: 0; padding: 6px 22px 6px 12px; font-size: 12px; line-height: 1.4; }
+.scm-message.error { background: #3b2525; color: #f48771; }
+.scm-message.notice { background: #25331f; color: #89d185; }
+.scm-dismiss { position: absolute; top: 1px; right: 4px; border: 0; background: transparent; font-size: 15px; cursor: pointer; }
+.scm-file-lists { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.scm-section { padding-bottom: 6px; }
+.scm-section-title { display: flex; align-items: center; justify-content: space-between; height: 22px; padding: 0 8px 0 12px; color: #bbbbbb; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.scm-count { color: var(--foreground-muted); font-weight: 400; }
+.scm-file-row { display: flex; align-items: center; height: 22px; padding-right: 4px; }
+.scm-file-row:hover, .scm-file-row.active { background: var(--hover); }
+.scm-file-label { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 4px 0 12px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.scm-file-badge { flex: 0 0 auto; width: 12px; text-align: center; font-size: 11px; }
+.scm-file-badge.modified { color: #e2c08d; }
+.scm-file-badge.added, .scm-file-badge.untracked { color: #81b88b; }
+.scm-file-badge.deleted { color: #c74e39; }
+.scm-file-badge.renamed, .scm-file-badge.copied { color: #75beff; }
+.scm-file-badge.unmerged, .scm-file-badge.unknown { color: #cca700; }
+.scm-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scm-file-path { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground-muted); font-size: 11px; }
+.scm-file-actions { flex: 0 0 auto; display: flex; gap: 2px; opacity: 0; }
+.scm-file-row:hover .scm-file-actions, .scm-file-row.active .scm-file-actions { opacity: 1; }
+.scm-icon-button { width: 20px; height: 20px; display: grid; place-content: center; border: 0; border-radius: 3px; background: transparent; color: var(--foreground); font-size: 14px; cursor: pointer; }
+.scm-icon-button:hover:not(:disabled) { background: #4a4a4a; }
+.scm-icon-button:disabled { opacity: .35; cursor: default; }
+.scm-clean { padding: 4px 12px 8px; }
+.scm-diff { flex: 0 0 240px; display: flex; flex-direction: column; min-height: 140px; background: var(--editor-bg); border-top: 1px solid var(--border); }
+.scm-diff-header { flex: 0 0 26px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 12px; font-size: 12px; }
+.scm-diff-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scm-diff-badge { flex: 0 0 auto; padding: 1px 6px; border-radius: 8px; background: #37373d; color: var(--foreground-muted); font-size: 10px; }
+.scm-diff-actions { flex: 0 0 auto; display: flex; }
+.scm-diff-surface { flex: 1 1 auto; min-height: 0; }
+.scm-diff-binary { padding: 8px 12px; }
+
+/* github panel ------------------------------------------------------ */
+.github-panel { flex: 0 0 auto; display: flex; flex-direction: column; max-height: 45%; border-top: 1px solid var(--border); }
+.github-header { flex: 0 0 26px; display: flex; align-items: center; justify-content: space-between; padding-right: 8px; }
+.github-header-toggle { flex: 1 1 auto; display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px 0 12px; border: 0; background: transparent; color: #bbbbbb; font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+.github-header-toggle .tree-chevron { transform: rotate(-90deg); }
+.github-header-toggle .tree-chevron.open { transform: none; }
+.github-signout { flex: 0 0 auto; border: 0; background: transparent; color: var(--foreground-muted); font-size: 11px; cursor: pointer; }
+.github-signout:hover { color: var(--foreground); text-decoration: underline; }
+.github-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 12px; }
+.github-field { display: flex; flex-direction: column; gap: 4px; color: var(--foreground-muted); font-size: 11px; }
+.github-field input, .github-filter { width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 2px; background: #3c3c3c; color: var(--foreground); font: 12px var(--font-ui); }
+.github-field input:focus, .github-filter:focus { outline: none; border-color: var(--accent); }
+.github-device { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.github-code { padding: 6px 14px; border: 1px dashed var(--accent); border-radius: 4px; background: #2b2b2b; color: #fff; font: 700 20px var(--font-mono); letter-spacing: 3px; cursor: pointer; }
+.github-code:hover { background: #333; }
+.github-link { padding: 0; border: 0; background: transparent; color: #75beff; font: inherit; text-decoration: underline; cursor: pointer; }
+.github-repo-list { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow: auto; }
+.github-repo { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 3px; }
+.github-repo:hover { background: var(--hover); }
+.github-repo-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.github-repo-name { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.github-repo-badge { flex: 0 0 auto; padding: 0 5px; border: 1px solid var(--border); border-radius: 8px; color: var(--foreground-muted); font-size: 9px; text-transform: uppercase; }
+.github-repo-meta { color: var(--foreground-muted); font-size: 11px; }

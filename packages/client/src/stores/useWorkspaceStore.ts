@@ -15,6 +15,12 @@ interface WorkspaceState {
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   updateContent: (tabId: string, content: string) => void;
+  /**
+   * Replace the buffer of every open tab whose file changed outside the
+   * editor (agent diff accepted, checkpoint restore). Content now matches
+   * disk, so the dirty flag is cleared. (Prompt 4)
+   */
+  applyExternalFileContent: (filePath: string, content: string) => void;
   saveActiveFile: () => Promise<void>;
   setCursorPosition: (line: number, column: number) => void;
   clearError: () => void;
@@ -118,6 +124,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     contents: { ...state.contents, [tabId]: content },
     openTabs: state.openTabs.map((tab) => tab.id === tabId ? { ...tab, isDirty: true } : tab),
   })),
+
+  applyExternalFileContent: (filePath, content) => set((state) => {
+    if (!state.openTabs.some((tab) => tab.filePath === filePath)) return {};
+    const contents = { ...state.contents };
+    for (const tab of state.openTabs) {
+      if (tab.filePath === filePath) contents[tab.id] = content;
+    }
+    return {
+      contents,
+      openTabs: state.openTabs.map((tab) =>
+        tab.filePath === filePath ? { ...tab, isDirty: false } : tab),
+    };
+  }),
 
   saveActiveFile: async () => {
     const { activeTabId, openTabs, contents } = get();

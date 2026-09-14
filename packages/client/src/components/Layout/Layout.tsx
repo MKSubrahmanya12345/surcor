@@ -5,6 +5,7 @@ import { Editor } from "../Editor/Editor";
 import { SourceControl } from "../SourceControl/SourceControl";
 import { StatusBar } from "../StatusBar/StatusBar";
 import { Terminal } from "../Terminal/Terminal";
+import { ChatPanel } from "../ChatPanel/ChatPanel";
 import { useUiStore } from "../../stores/useUiStore";
 
 export function Layout() {
@@ -40,7 +41,10 @@ export function Layout() {
             <Terminal />
           </div>
         </div>
-        <div id="panel-right-slot" style={{ display: "none" }} />
+        {/* Prompt 4 mounts the chat panel here (style flipped from "none"). */}
+        <div id="panel-right-slot" style={{ display: "flex" }}>
+          <ChatPanel />
+        </div>
       </div>
       <StatusBar />
     </div>

@@ -84,3 +84,38 @@ bun run dev
 - `types.ts`: `TerminalSessionInfo`, `TerminalTab`, `GitFileStatus`, `GitStatusSummary`, `GitDiff`,
   `GitBranchInfo`, `GitOperationResult`, `GitCloneResult`, `GitHubRepo`, `DeviceAuthState`,
   `GitHubSession`, `GitHubAuthStatus`. No existing export was changed or removed.
+
+## Prompt 3 — agent server
+
+Standalone Bun process (`packages/server`) reachable at `ws://localhost:4500`:
+
+- Provider router with fallback: Anthropic → OpenAI → Gemini → Ollama (order via `PROVIDER_ORDER`
+  in `packages/server/.env`), streaming, per-provider timeout.
+- Agentic loop with tool use: `read_file`, `write_file`, `list_dir`, `run_terminal_command`,
+  `apply_diff` (proposal-only; never writes to disk itself).
+- Modes: **Ask** (no tools), **Agent** (full tool loop), **Plan** (numbered plan first, execution
+  only after an explicit `approve_plan` message).
+- `bun:sqlite` persistence for sessions, messages, checkpoints metadata, and pending diffs.
+- Start it with `bun run packages/server/src/server.ts`.
+
+## Prompt 4 — chat panel, modes, diff review, checkpoints
+
+The Cursor-style chat experience, mounted in Prompt 1's `#panel-right-slot`:
+
+- `services/agentSocket.ts` — the **only** renderer file that opens a WebSocket to the agent
+  server. Connects on launch, sends `init` with the open workspace root, reconnects with backoff,
+  and remembers the server session id per workspace (localStorage) so history survives restarts.
+  Override the endpoint with `VITE_FORGE_AGENT_URL` / `VITE_FORGE_AGENT_TOKEN` if needed.
+- `ChatPanel` — streaming messages (token-by-token `chat_chunk` deltas), markdown rendering,
+  collapsed `used tool: name(args)` lines with expandable output, an Ask | Agent | Plan mode
+  switcher, Enter-to-send composer, and a Cancel button while a turn runs.
+- `DiffReview` — side-by-side Monaco `DiffEditor` for every pending `diff_proposed`. Accept writes
+  through Prompt 1's `fs:writeFile` IPC handler (the single file-write path) and refreshes the open
+  tab's content and dirty state; Reject only sends the `diff_decision`.
+- `PlanApproval` — Approve / Edit plan buttons under a pending plan. Approve sends `approve_plan`;
+  nothing executes before that.
+- `CheckpointBar` — before the first write-type tool call of a turn, the client snapshots every
+  file open in a tab into a Checkpoint (persisted in localStorage; checkpoints are a client-side
+  undo concept). "Restore to before last change" writes the snapshot back to disk via
+  `fs:writeFile` and refreshes the open tabs.
+- `packages/shared` was **not** modified — Prompt 3's protocol already covered every message shape.

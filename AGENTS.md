@@ -87,3 +87,5 @@ Forge's SQLite, surfaced through Forge's agent tools and WebSocket protocol.
   `process.env` so the engine (which reads process.env directly) sees the same
   AWS keys/feature flags as the rest of the server.
 - `sidecars/` is an untracked nested-repo artifact from git stash operations — leave alone.
+
+- Yet to make changes today

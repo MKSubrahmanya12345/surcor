@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@forge/shared": "workspace:*",
+    "@forge/wireup": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {

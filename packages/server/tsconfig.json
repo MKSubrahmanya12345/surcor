@@ -1,5 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "types": ["bun"] },
+  "compilerOptions": {
+    "types": ["bun"],
+    "paths": { "@/*": ["./../wireup/src/*"] }
+  },
   "include": ["src"]
 }

@@ -209,15 +209,10 @@ export interface GitHubAuthStatus {
 // Agent server (Prompt 3). Canonical contracts, including provider/tool APIs.
 // ---------------------------------------------------------------------------
 
-// "bedrock" is an APPENDED union member (Amazon Bedrock Converse API). Every
-// previously valid ProviderName value remains valid and unchanged.
-export type ProviderName = "anthropic" | "openai" | "gemini" | "ollama" | "bedrock";
+export type ProviderName = "bedrock";
 export type TerminalOutputStream = "stdout" | "stderr";
 
-export interface ProviderToolCall extends ToolCall {
-  // Gemini thinking models require this opaque signature on subsequent turns.
-  providerMetadata?: { geminiThoughtSignature?: string };
-}
+export interface ProviderToolCall extends ToolCall {}
 
 export interface ProviderMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -256,12 +251,6 @@ export interface ProviderAdapter {
   streamComplete(request: ProviderRequest): AsyncIterable<ProviderStreamEvent>;
 }
 
-export interface ProviderConfig {
-  baseUrl: string;
-  model: string;
-  apiKey?: string;
-}
-
 export interface ProviderToolCallAccumulator {
   id: string;
   name: string;
@@ -276,7 +265,6 @@ export interface AgentServerConfig {
   token?: string;
   allowedOrigins: string[];
   providerOrder: ProviderName[];
-  providers: Record<ProviderName, ProviderConfig>;
   providerTimeoutMs: number;
   maxTurns: number;
   maxToolCallsPerTurn: number;
@@ -401,9 +389,7 @@ export interface AgentSocketState {
 }
 
 // ---------------------------------------------------------------------------
-// Amazon Bedrock (added with Prompt 5). ProviderName is widened by APPENDING a
-// member — no existing member was renamed or removed, so every existing
-// `ProviderName` value stays valid.
+// Amazon Bedrock (Converse API).
 // ---------------------------------------------------------------------------
 
 export interface BedrockCredentials {
@@ -477,6 +463,24 @@ export interface SearchCodebaseArgs {
 export interface WebSearchArgs {
   query: string;
   maxResults?: number;
+}
+
+export interface HardwareBuildArgs {
+  /** Plain-English specification of the hardware to build. Optional when `projectId` continues an existing project. */
+  prompt?: string;
+  /** Continue a previously generated engine project: rebuilds it as a new frozen revision (vN+1) and keeps history. */
+  projectId?: string;
+}
+
+export interface HardwareListArgs {
+  /** Number of most-recent projects to return (default 25). */
+  topK?: number;
+}
+
+export interface HardwareProjectArgs {
+  projectId: string;
+  /** Include the full firmware sources in the returned workstate (default true). */
+  includeCode?: boolean;
 }
 
 export type IndexStatus = "idle" | "indexing" | "ready" | "error";

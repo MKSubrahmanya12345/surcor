@@ -5,7 +5,7 @@ import {
   type AgentMode, type AgentServerConfig, type AgentSocketState, type ChatMessage,
   type ClientMessage, type ServerMessage,
 } from "@forge/shared";
-import { loadConfig } from "./config";
+import { loadConfig, serverEnv } from "./config";
 import { ForgeDatabase } from "./db/client";
 import { createProviderRouter } from "./providers/router";
 import { runAgentTurn } from "./agent/loop";
@@ -14,10 +14,21 @@ import { validateWorkspaceRoot } from "./tools/paths";
 import { configureWebSearch } from "./tools/webSearch";
 import { loadWorkspaceRules } from "./agent/rules";
 import { disposeMcpManager, initMcpManager, mcpStatuses, reloadMcpServers } from "./mcp/clientManager";
+import { initWireupStore } from "./wireup/store";
 
 export function startServer(config: AgentServerConfig = loadConfig()) {
   const provider = createProviderRouter(config);
   const database = new ForgeDatabase(config.databasePath);
+  // The wireup engine reads process.env directly (it has no config object of
+  // its own): re-apply the merged .env + process.env map Bun would not have
+  // loaded (CWD is the repo root, not packages/server), so the hardware
+  // pipeline sees the same AWS keys/feature flags as the rest of the server.
+  for (const [key, value] of Object.entries(serverEnv())) {
+    if (value !== undefined) process.env[key] = value;
+  }
+  // Prompt 7: hardware-project workstate lives in the same SQLite file; a
+  // registered sink flushes engine mutations through and hydrates on first boot.
+  initWireupStore(database.sqlite);
   // Prompt 5: codebase index lives in the same SQLite file (schema.sql creates
   // the embeddings/index tables on boot). Tools reach it through index/service.
   initIndexService(database.sqlite, config);

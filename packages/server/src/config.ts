@@ -123,10 +123,10 @@ export function webSearchConfig(): WebSearchConfig {
 
 export function loadConfig(): AgentServerConfig {
   const env = serverEnv();
-  const names: ProviderName[] = ["anthropic", "openai", "gemini", "ollama", "bedrock"];
+  const names: ProviderName[] = ["bedrock"];
   const order = envList(env, "PROVIDER_ORDER", names.join(","));
   if (!order.length || order.some((name) => !names.includes(name as ProviderName))) {
-    throw new Error("PROVIDER_ORDER must list anthropic, openai, gemini, ollama, and/or bedrock.");
+    throw new Error("PROVIDER_ORDER must list bedrock.");
   }
   const hostname = env.HOST ?? "127.0.0.1";
   const token = env.FORGE_SERVER_TOKEN || undefined;
@@ -145,30 +145,6 @@ export function loadConfig(): AgentServerConfig {
     token,
     allowedOrigins: envList(env, "ALLOWED_ORIGINS", ""),
     providerOrder: [...new Set(order)] as ProviderName[],
-    providers: {
-      anthropic: {
-        apiKey: env.ANTHROPIC_API_KEY,
-        baseUrl: env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com",
-        model: env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514",
-      },
-      openai: {
-        apiKey: env.OPENAI_API_KEY,
-        baseUrl: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-        model: env.OPENAI_MODEL ?? "gpt-4o",
-      },
-      gemini: {
-        apiKey: env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY,
-        baseUrl: env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta",
-        model: env.GEMINI_MODEL ?? "gemini-2.5-flash",
-      },
-      ollama: {
-        baseUrl: env.OLLAMA_BASE_URL ?? "http://localhost:11434",
-        model: env.OLLAMA_MODEL ?? "llama3.1:8b",
-      },
-      // SigV4 credentials (or AWS_BEARER_TOKEN_BEDROCK) are resolved per
-      // request, so `apiKey` stays empty and the router asks bedrockAvailable().
-      bedrock: { apiKey: undefined, baseUrl: bedrock.baseUrl, model: bedrock.model },
-    },
     bedrock,
     index: loadIndexConfig(env),
     webSearch: loadWebSearchConfig(env),

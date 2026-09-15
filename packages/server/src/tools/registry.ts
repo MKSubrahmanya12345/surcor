@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
-  applyDiffArgsSchema, listDirArgsSchema, readFileArgsSchema, runTerminalCommandArgsSchema,
+  applyDiffArgsSchema, hardwareBuildArgsSchema, hardwareListArgsSchema, hardwareProjectArgsSchema,
+  listDirArgsSchema, readFileArgsSchema, runTerminalCommandArgsSchema,
   searchCodebaseArgsSchema, webSearchArgsSchema, writeFileArgsSchema,
   type AgentToolContext, type RegisteredTool, type ToolCall, type ToolDefinition, type ToolHandler, type ToolResult,
 } from "@forge/shared";
@@ -11,6 +12,9 @@ import { runTerminalCommand } from "./runTerminalCommand";
 import { applyDiff } from "./applyDiff";
 import { searchCodebase } from "./searchCodebase";
 import { webSearch } from "./webSearch";
+import { hardwareBuild } from "./hardwareBuild";
+import { hardwareList } from "./hardwareList";
+import { hardwareProject } from "./hardwareProject";
 
 // One registry for built-ins and future indexing/MCP tools. No loop changes needed.
 export const toolRegistry = new Map<string, RegisteredTool>();
@@ -35,6 +39,15 @@ registerTool({ name: "apply_diff", description: "Propose full replacement conten
 // generic dispatch in agent/loop.ts — nothing else had to change.
 registerTool({ name: "search_codebase", description: "Semantic search over the indexed workspace. Returns the most relevant code chunks with workspace-relative paths, line ranges and similarity scores. Use this FIRST to locate code by meaning (for example \"where is the WebSocket connection set up\") instead of guessing paths, then read_file for full context. pathPrefix narrows to a subtree; topK defaults to 6.", parameters: parameters(searchCodebaseArgsSchema) }, searchCodebase);
 registerTool({ name: "web_search", description: "Search the live web (Tavily, falling back to Brave). Use for anything that must be current or is newer than the model's training data: library/tool versions, changelogs, API references, error messages. Returns titles, snippets and URLs; cite the URLs you rely on.", parameters: parameters(webSearchArgsSchema) }, webSearch);
+
+// Prompt 7: the wireup agentic hardware engine. Runs a full hardware project
+// build (components → pins → wiring → firmware → validation w/ target fixes)
+// from a plain-English prompt, streaming every pipeline stage back as a
+// tool_result_chunk. Offline machines degrade deterministically to the catalog.
+// The hardware_* family shares one workstate store persisted in forge.sqlite.
+registerTool({ name: "hardware_build", description: "Run the agentic hardware engineering pipeline on a plain-English prompt. Generates a complete hardware project: component selection, pin assignments, wiring plan, Arduino C++ firmware, validation with targeted fixes. Streams each pipeline stage back live and returns the final workstate JSON (every component, wiring net and code file). Pass projectId to continue an existing project: the new prompt is persisted (if given) and the build is regenerated as a new frozen revision vN+1, keeping all prior revisions.", parameters: parameters(hardwareBuildArgsSchema) }, hardwareBuild);
+registerTool({ name: "hardware_list", description: "List hardware projects in the engine workstate: id, name, status, stage, revision, component/wiring/code counts. Use hardware_project to inspect one in full, or hardware_build with its projectId to continue it.", parameters: parameters(hardwareListArgsSchema) }, hardwareList);
+registerTool({ name: "hardware_project", description: "Return the full workstate of an existing hardware project (components, pin assignments, wiring connections, firmware sources, validation issues, revision history). Use includeCode=false to omit the firmware sources. Then persist files into the workspace with write_file/apply_diff.", parameters: parameters(hardwareProjectArgsSchema) }, hardwareProject);
 
 export function getToolDefinitions(): ToolDefinition[] {
   return [...toolRegistry.values()].map((tool) => tool.definition);

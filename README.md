@@ -96,8 +96,8 @@ bun run dev
 
 Standalone Bun process (`packages/server`) reachable at `ws://localhost:4500`:
 
-- Provider router with fallback: Anthropic → OpenAI → Gemini → Ollama (order via `PROVIDER_ORDER`
-  in `packages/server/.env`), streaming, per-provider timeout.
+- Provider router with fallback: Amazon Bedrock (`PROVIDER_ORDER` in `packages/server/.env`),
+  streaming, per-request timeout.
 - Agentic loop with tool use: `read_file`, `write_file`, `list_dir`, `run_terminal_command`,
   `apply_diff` (proposal-only; never writes to disk itself).
 - Modes: **Ask** (no tools), **Agent** (full tool loop), **Plan** (numbered plan first, execution
@@ -156,8 +156,7 @@ The Cursor-style chat experience, mounted in Prompt 1's `#panel-right-slot`:
 ### Amazon Bedrock provider
 
 - `providers/bedrock.ts`, with `providers/aws/{sigv4,credentials,eventStream}.ts` underneath it —
-  the **Converse API** (`ConverseStream`), registered as a fifth provider choice next to
-  anthropic/openai/gemini/ollama (`PROVIDER_ORDER=anthropic,bedrock,…`).
+  the **Converse API** (`ConverseStream`), the supported chat provider (`PROVIDER_ORDER=bedrock`).
 - Decodes AWS's `application/vnd.amazon.eventstream` binary framing (it is *not* SSE) into the same
   stream-event shape the router already consumes; tool use, system prompts and stop reasons map
   onto the shared provider interface.
@@ -167,7 +166,7 @@ The Cursor-style chat experience, mounted in Prompt 1's `#panel-right-slot`:
 ### Configuration
 
 `packages/server/.env.example` and `packages/client/.env.example` document every variable — server
-port/token, each provider, Bedrock's three auth options, agent limits, indexing, web search, client
+port/token, the Bedrock provider, agent limits, indexing, web search, client
 endpoints, and the GitHub device flow. Copy to `.env` and fill in what you need.
 
 ### Explorer file operations

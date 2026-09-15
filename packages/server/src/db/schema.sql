@@ -93,3 +93,24 @@ CREATE INDEX IF NOT EXISTS index_files_workspace ON index_files(workspace_id);
 
 INSERT INTO settings(key, value) VALUES ('schema_version', '2')
   ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+
+-- ---------------------------------------------------------------------------
+-- Wireup engine workstate: the agentic hardware pipeline persists its projects
+-- and the component catalog as JSON blobs through the pluggable sink seam. The
+-- same forge.sqlite file therefore holds hardware state alongside sessions.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS wireup_projects (
+  id TEXT PRIMARY KEY,
+  doc TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS wireup_components (
+  id TEXT PRIMARY KEY,
+  doc TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+INSERT INTO settings(key, value) VALUES ('schema_version', '3')
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value;

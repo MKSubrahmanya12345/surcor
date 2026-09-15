@@ -2,6 +2,9 @@ import { z } from "zod";
 import type {
   ApplyDiffArgs,
   ClientMessage,
+  HardwareBuildArgs,
+  HardwareListArgs,
+  HardwareProjectArgs,
   ListDirArgs,
   ReadFileArgs,
   RunTerminalCommandArgs,
@@ -77,4 +80,18 @@ export const searchCodebaseArgsSchema: z.ZodType<SearchCodebaseArgs> = z.strictO
 export const webSearchArgsSchema: z.ZodType<WebSearchArgs> = z.strictObject({
   query: z.string().min(1).max(500).refine((value) => value.trim().length > 0),
   maxResults: z.number().int().min(1).max(10).optional(),
+});
+
+export const hardwareBuildArgsSchema: z.ZodType<HardwareBuildArgs> = z.strictObject({
+  prompt: z.string().min(1).max(16_000).refine((value) => value.trim().length > 0).optional(),
+  projectId: z.string().min(1).max(128).optional(),
+});
+
+export const hardwareListArgsSchema: z.ZodType<HardwareListArgs> = z.strictObject({
+  topK: z.number().int().min(1).max(100).optional(),
+});
+
+export const hardwareProjectArgsSchema: z.ZodType<HardwareProjectArgs> = z.strictObject({
+  projectId: z.string().min(1).max(128),
+  includeCode: z.boolean().optional(),
 });

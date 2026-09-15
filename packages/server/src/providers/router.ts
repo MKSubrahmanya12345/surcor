@@ -1,17 +1,13 @@
 import type {
-  AgentServerConfig, ProviderAdapter, ProviderName, ProviderRequest, ProviderResponse, ProviderStreamEvent,
+  AgentServerConfig, ProviderAdapter, ProviderRequest, ProviderResponse, ProviderStreamEvent,
 } from "@forge/shared";
-import { AnthropicProvider } from "./anthropic";
-import { OpenAIProvider } from "./openai";
-import { GeminiProvider } from "./gemini";
-import { OllamaProvider } from "./ollama";
 import { BedrockProvider, bedrockAvailable } from "./bedrock";
 import { consumeCompletion, ProviderHttpError } from "./http";
 
 export class ProviderRouter implements ProviderAdapter {
   readonly name = "router" as const;
   constructor(private readonly adapters: ProviderAdapter[], private readonly timeoutMs = 120_000) {
-    if (!adapters.length) throw new Error("No providers configured. Set an API key or include ollama in PROVIDER_ORDER.");
+    if (!adapters.length) throw new Error("No providers configured. Configure Bedrock via AWS credentials or AWS_BEARER_TOKEN_BEDROCK.");
   }
 
   complete(request: ProviderRequest): Promise<ProviderResponse> {
@@ -57,27 +53,13 @@ export class ProviderRouter implements ProviderAdapter {
         controller.abort();
       }
     }
-    throw new Error(`All configured providers failed (${failures.join("; ")}). Check API keys, models, and Ollama availability.`);
+    throw new Error(`All configured providers failed (${failures.join("; ")}). Check Bedrock credentials and that the model id is enabled.`);
   }
 }
 
-/** Is a provider usable right now? Ollama needs no key, Bedrock uses SigV4/AWS
- *  credentials instead of one, everything else needs an API key. */
-export function isProviderConfigured(config: AgentServerConfig, name: ProviderName): boolean {
-  if (name === "ollama") return true;
-  if (name === "bedrock") return bedrockAvailable(config.bedrock);
-  return Boolean(config.providers[name].apiKey);
-}
-
 export function createProviderRouter(config: AgentServerConfig): ProviderRouter {
-  const providers: Record<ProviderName, ProviderAdapter> = {
-    anthropic: new AnthropicProvider(config.providers.anthropic),
-    openai: new OpenAIProvider(config.providers.openai),
-    gemini: new GeminiProvider(config.providers.gemini),
-    ollama: new OllamaProvider(config.providers.ollama),
-    bedrock: new BedrockProvider(config.bedrock),
-  };
-  const active = config.providerOrder.filter((name) => isProviderConfigured(config, name));
-  console.info(`[providers] Priority: ${active.join(" -> ") || "none"}`);
-  return new ProviderRouter(active.map((name) => providers[name]), config.providerTimeoutMs);
+  const providers: ProviderAdapter[] = [];
+  if (bedrockAvailable(config.bedrock)) providers.push(new BedrockProvider(config.bedrock));
+  console.info(`[providers] Priority: ${providers.map((provider) => provider.name).join(" -> ") || "none"}`);
+  return new ProviderRouter(providers, config.providerTimeoutMs);
 }

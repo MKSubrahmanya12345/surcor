@@ -17,6 +17,41 @@ export class ForgeDatabase implements AgentDatabase {
     this.sqlite.transaction(() => {
       this.sqlite.exec(readFileSync(new URL("./schema.sql", import.meta.url), "utf8"));
     })();
+    this.ensureCadMode();
+  }
+
+  /**
+   * Prompt 7: databases created before CAD mode carry
+   * `CHECK (mode IN ('ask','agent','plan'))`, which rejects the `cad` rows the
+   * new mode persists. SQLite has no ALTER CONSTRAINT, so the table is rebuilt
+   * once — same columns, same indexes, widened CHECK. It runs only when
+   * sqlite_master says the old constraint is still there, so every later boot is
+   * a no-op read of one row.
+   */
+  private ensureCadMode(): void {
+    const row = this.sqlite.query<{ sql: string | null }, []>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'messages'",
+    ).get();
+    if (!row?.sql || /'cad'/.test(row.sql)) return;
+    this.sqlite.transaction(() => {
+      this.sqlite.exec(`
+        CREATE TABLE messages_prompt7 (
+          sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+          id TEXT NOT NULL UNIQUE,
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
+          content TEXT NOT NULL,
+          mode TEXT NOT NULL CHECK (mode IN ('ask', 'agent', 'plan', 'cad')),
+          tool_calls TEXT,
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO messages_prompt7(sequence, id, session_id, role, content, mode, tool_calls, created_at)
+          SELECT sequence, id, session_id, role, content, mode, tool_calls, created_at FROM messages;
+        DROP TABLE messages;
+        ALTER TABLE messages_prompt7 RENAME TO messages;
+        CREATE INDEX IF NOT EXISTS messages_session_sequence ON messages(session_id, sequence);
+      `);
+    })();
   }
 
   openSession(workspaceRoot: string, sessionId?: string): AgentSession {

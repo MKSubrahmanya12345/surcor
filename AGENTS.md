@@ -40,22 +40,40 @@ Forge's SQLite, surfaced through Forge's agent tools and WebSocket protocol.
 ## Verify commands
 - `bun install` (root, after editing package.jsons)
 - `bun run --cwd packages/wireup typecheck` — engine typecheck
-- `bun test` (root) — whole-repo test suite (118 pass / 17 pre-existing fail / 1 error is baseline)
-  - includes `packages/wireup/test/smoke.test.ts` (5) + `packages/server/src/wireup/store.test.ts` (1)
+- `bun test` (root) — whole-repo test suite (169 pass / 18 pre-existing fail / 0 error is baseline)
+  - includes `packages/wireup/test/smoke.test.ts` (5) + `packages/server/src/wireup/store.test.ts` (1) + all 80 Prompt-7 CAD tests
 - `bun run --cwd packages/server typecheck`
 - `bun run typecheck` — client typecheck (root script)
 - Baseline server typecheck errors that are pre-existing and NOT mine:
-  1. `packages/server/src/db/client.ts:90` (DiffProposal status typing)
+  1. `packages/server/src/db/client.ts:125` (DiffProposal status typing)
   2. `packages/server/src/providers/aws/eventStream.ts:120` (Uint8Array<ArrayBufferLike>)
 
 ## Known state
-- Played baseline: `bun test` = 118 pass / 17 fail / 1 error (git/electron/zustand
-  harness failures, unrelated to provider work). The +6 passers over the old 112
-  are the wireup engine smoke tests + the hardware_build↔SQLite integration test.
+- Current baseline after the `git pull` repair + CAD-on-Windows port: `bun test` =
+  169 pass / 18 fail / 0 error. All 18 are pre-existing Windows harness failures
+  unrelated to our work: prompt2/git+github+pty-missing+terminal `Cannot find
+  module '@forge/shared'`, prompt5 `state().openFile`/`collapseAll`/`setState`
+  zustand faults. Zero CAD, wireup, or hardware failures; no test errors.
 - The engine (`@forge/wireup`) is PORted and standalone-green: typecheck + tests
   pass. It is wired into the server as the `hardware_build` agent tool, with an
   SQLite persistence sink (`packages/server/src/wireup/store.ts`) seeded into
   `schema.sql` (now `schema_version` 3) and hydrated at boot (`server.ts`).
+- Upstream's Prompt-7 CAD suite (PR#8 merge) is now GREEN on Windows. Ported
+  upstream POSIX-isms: `tests/prompt7/fixture.ts` (`fixturePath()` — never
+  `new URL(...).pathname`, which yields `/E:/` on Windows); real `tmpdir()`
+  instead of `mkdtemp("/tmp/...")` (Bun returns a drive-less `/tmp/x` path that
+  Bun.spawn cannot execute); Windows stub converters write `occt-stub.cmd`
+  (`@ECHO OFF` + `"%(bun)" "%~dp0occt-stub.mjs" %*`) instead of `#!/bin/sh`.
+- CAD runtime fixes for Windows: `cad/artifacts.ts` containment is separator-aware
+  (`contains()` + `basename()`), `cad/convertToGlb.ts` `resolveCascadeBin` searches
+  `.exe/.cmd/.bat` variants (Bun's `.bin` shims are `.exe` on Windows, npm's are
+  `.cmd`), splits PATH on `path.delimiter`, and falls back to `USERPROFILE`/
+  `os.homedir()` for the global npm bin. `cad/config.ts` `resolveCadLlm` was
+  rewritten for the bedrock-only world (env-derived OpenAI/Gemini/Ollama endpoints,
+  provider order falls back to `["bedrock"]`).
+- `opencascade-tools@^0.0.9` is now a root devDependency (WASM kernel), so the
+  kernel test runs for real and CAD STEP→GLB conversion works on Windows; without
+  it the suite degrades to the sidecar-GLB fallback + loud skip as designed.
 - avr8js resolution foot-gun: `src/types/avr8js.d.ts` was a stale hand-rolled
   ambient shim that shadowed the real (installed, accurate) avr8js 0.21.1 typings
   and made TS report nonexistent "missing" exports. DELETED; the harness now

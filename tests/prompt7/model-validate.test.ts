@@ -17,12 +17,12 @@ import { inspectGlb, looksLikeGlb } from "../../packages/server/src/cad/convertT
  * imitation: flange.step = bore + 4 bolt holes, plate.step = a bare box,
  * bolt.step = hex head + round shank.
  */
-const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
+import { fixturePath } from "./fixture";
 
 const scratch = (): string => mkdtempSync(`${tmpdir()}/forge-cad-validate-`);
 
 test("a real STEP file is accepted with a truthful topology fingerprint", async () => {
-  const result = await validateStepFile(`${FIXTURES}flange.step`);
+  const result = await validateStepFile(fixturePath("flange.step"));
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.fingerprint.solids).toBe(1);
@@ -33,7 +33,7 @@ test("a real STEP file is accepted with a truthful topology fingerprint", async 
 });
 
 test("a bare box is recognised as the placeholder shape it must never be", async () => {
-  const result = await validateStepFile(`${FIXTURES}plate.step`);
+  const result = await validateStepFile(fixturePath("plate.step"));
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.fingerprint.faces).toBe(6);
@@ -67,7 +67,7 @@ test("a JSON error body with a .step filename is rejected", async () => {
 test("a truncated STEP file is rejected instead of half-trusted", async () => {
   const dir = scratch();
   const path = join(dir, "truncated.step");
-  const full = await Bun.file(`${FIXTURES}flange.step`).text();
+  const full = await Bun.file(fixturePath("flange.step")).text();
   // Cut the file where DATA is open: header intact, terminator gone.
   await writeFile(path, full.slice(0, Math.floor(full.length * 0.6)));
   const result = await validateStepFile(path);
@@ -130,7 +130,7 @@ test("validateModelFile judges by content when the extension lies", async () => 
   expect(result.ok).toBe(false);
 
   const realStepCopy = join(dir, "model.stl");   // wrong extension, STEP content
-  await copyFile(`${FIXTURES}flange.step`, realStepCopy);
+  await copyFile(fixturePath("flange.step"), realStepCopy);
   const sniffed = await validateModelFile(realStepCopy, "auto");
   expect(sniffed.ok).toBe(true);
 });

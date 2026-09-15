@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { realpath, stat as fsStat } from "node:fs/promises";
-import { extname, resolve } from "node:path";
+import { basename, extname, resolve, sep } from "node:path";
 import type { CadConfig } from "./config";
 
 /**
@@ -33,6 +33,10 @@ const timingSafeEquals = (a: string, b: string): boolean => {
   return mismatch === 0;
 };
 
+/** True when `file` is `dir` or strictly inside it (separator-aware). */
+const contains = (dir: string, file: string): boolean =>
+  file === dir || file.startsWith(dir.endsWith(sep) ? dir : dir + sep);
+
 /** Resolve `path` only when it stays inside the CAD cache directory. */
 export async function resolveArtifactPath(raw: string, config: CadConfig): Promise<string | null> {
   if (!raw || raw.includes("\0")) return null;
@@ -43,7 +47,7 @@ export async function resolveArtifactPath(raw: string, config: CadConfig): Promi
   } catch {
     return null;
   }
-  if (candidate !== root && !candidate.startsWith(root + "/")) return null;
+  if (candidate !== root && !contains(root, candidate)) return null;
   if (!(extname(candidate).toLowerCase() in MEDIA_TYPES)) return null;
   // Follow symlinks on both sides so a link out of the cache is rejected too.
   const [realRoot, realCandidate] = await Promise.all([
@@ -51,7 +55,7 @@ export async function resolveArtifactPath(raw: string, config: CadConfig): Promi
     realpath(candidate).catch(() => null),
   ]);
   if (!realCandidate) return null;
-  if (realCandidate !== realRoot && !realCandidate.startsWith(realRoot + "/")) return null;
+  if (realCandidate !== realRoot && !contains(realRoot, realCandidate)) return null;
   const info = await fsStat(realCandidate).catch(() => null);
   if (!info || !info.isFile()) return null;
   return realCandidate;
@@ -82,7 +86,7 @@ export async function serveCadArtifact(
     // cannot set a header on a plain link, and the anchor's `download` attribute
     // is ignored cross-origin, so the disposition has to come from the server.
     "content-disposition": url.searchParams.get("dl") === "1"
-      ? `attachment; filename="${resolved.split("/").pop() ?? "model"}"`
+      ? `attachment; filename="${basename(resolved) || "model"}"`
       : "inline",
   });
   if (request.method === "HEAD") return new Response(null, { status: 200, headers });

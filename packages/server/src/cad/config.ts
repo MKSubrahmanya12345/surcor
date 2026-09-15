@@ -92,18 +92,46 @@ function envFlag(env: Env, key: string, fallback: boolean): boolean {
 
 const trimSlash = (value: string): string => value.replace(/\/+$/, "");
 
-/** Providers whose API is OpenAI-compatible — the only kind MAC can talk to. */
-const COMPATIBLE_PROVIDERS: ProviderName[] = ["openai", "gemini", "ollama"];
+/**
+ * The MAC sidecar only speaks OpenAI's chat-completions protocol, so the
+ * providers it can reach are those with OpenAI-compatible endpoints. Forge's
+ * chat provider is Bedrock-only (Converse) — not one of them — so CAD must be
+ * pointed at a compatible endpoint explicitly (FORGE_CAD_BASE_URL) or via the
+ * OPENAI_/GEMINI_/OLLAMA_* environment keys the sidecar box is configured with.
+ */
+type CompatProvider = "openai" | "gemini" | "ollama";
+const COMPATIBLE_PROVIDERS: CompatProvider[] = ["openai", "gemini", "ollama"];
+const ALLOWED_PROVIDERS = ["anthropic", "openai", "gemini", "ollama", "bedrock"];
+
+/** Shape of a single provider setting, as read from env or an agent config. */
+interface CadProviderLike { baseUrl?: string; model?: string; apiKey?: string; }
 
 /**
- * Point MAC at whichever OpenAI-compatible endpoint Forge already routes to
- * (Prompt 3's provider router), unless FORGE_CAD_* overrides say otherwise.
+ * Decoupled from `AgentServerConfig`: Forge's provider world is Bedrock-only,
+ * and the CAD module must not reach into it just to find an OpenAI-compatible
+ * endpoint. The test suite still supplies upstream's richer shape via casts.
+ */
+interface CadAgentLike {
+  providerOrder?: ProviderName[];
+  providers?: Record<string, CadProviderLike>;
+}
+
+/** OpenAI-compatible endpoints reachable from this process's environment. */
+function envProvider(name: CompatProvider, env: Env): CadProviderLike | undefined {
+  if (name === "openai") return { baseUrl: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1", model: env.OPENAI_MODEL, apiKey: env.OPENAI_API_KEY };
+  if (name === "gemini") return { baseUrl: env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta", model: env.GEMINI_MODEL, apiKey: env.GEMINI_API_KEY };
+  return { baseUrl: env.OLLAMA_BASE_URL ?? "http://localhost:11434", model: env.OLLAMA_MODEL };
+}
+
+/**
+ * Point MAC at whichever OpenAI-compatible endpoint Forge can route to
+ * (unless FORGE_CAD_* overrides say otherwise).
  *
  * Gemini needs its dedicated OpenAI-compatibility path appended; Ollama needs
  * no key at all, so a placeholder is supplied because the sidecar's `/api/run`
  * rejects an empty `api_key` field.
  */
-export function resolveCadLlm(env: Env, agent?: AgentServerConfig): CadLlmConfig {
+export function resolveCadLlm(env: Env, agent?: AgentServerConfig | CadAgentLike): CadLlmConfig {
   const explicitBaseUrl = env.FORGE_CAD_BASE_URL?.trim();
   const model = env.FORGE_CAD_MODEL?.trim();
   const apiKey = env.FORGE_CAD_API_KEY?.trim();
@@ -117,26 +145,25 @@ export function resolveCadLlm(env: Env, agent?: AgentServerConfig): CadLlmConfig
       provider,
     };
   }
-  const config = agent ?? safeLoadConfig();
-  const order: ProviderName[] = (() => {
-    if (!env.FORGE_CAD_PROVIDER) return config.providerOrder;
+  const config: CadAgentLike = agent ?? safeLoadConfig();
+  const order: string[] = (() => {
+    if (!env.FORGE_CAD_PROVIDER) return config.providerOrder ?? [];
     const names = env.FORGE_CAD_PROVIDER.split(",").map((name) => name.trim()).filter(Boolean);
-    const known: ProviderName[] = ["anthropic", "openai", "gemini", "ollama", "bedrock"];
-    if (names.some((name) => !known.includes(name as ProviderName))) {
+    if (names.some((name) => !ALLOWED_PROVIDERS.includes(name))) {
       throw new Error("FORGE_CAD_PROVIDER must list anthropic, openai, gemini, ollama and/or bedrock.");
     }
-    return names as ProviderName[];
+    return names;
   })();
   for (const name of order) {
-    if (!COMPATIBLE_PROVIDERS.includes(name)) continue;
-    const provider = config.providers[name];
+    if (!COMPATIBLE_PROVIDERS.includes(name as CompatProvider)) continue;
+    const provider = config.providers?.[name] ?? envProvider(name as CompatProvider, env);
     if (!provider?.baseUrl) continue;
     if (name === "ollama") {
       // Local, free, keyless. MAC still requires a non-empty api_key field.
       return {
         baseUrl: trimSlash(provider.baseUrl.endsWith("/v1") ? provider.baseUrl : `${provider.baseUrl}/v1`),
-        model: model || provider.model,
-        aiderModel: `ollama/${model || provider.model}`,
+        model: model || provider.model || "qwen3-coder:32b",
+        aiderModel: `ollama/${model || provider.model || "qwen3-coder:32b"}`,
         apiKey: "ollama",
         provider: `ollama (${env.OLLAMA_BASE_URL ?? "http://localhost:11434"})`,
       };
@@ -147,16 +174,16 @@ export function resolveCadLlm(env: Env, agent?: AgentServerConfig): CadLlmConfig
       const compatible = base.includes("/openai") ? base : `${base}/openai`;
       return {
         baseUrl: compatible,
-        model: model || provider.model,
-        aiderModel: `openai/${model || provider.model}`,
+        model: model || provider.model || "qwen3-coder:32b",
+        aiderModel: `openai/${model || provider.model || "qwen3-coder:32b"}`,
         apiKey: provider.apiKey,
         provider: `gemini (${compatible})`,
       };
     }
     return {
       baseUrl: trimSlash(provider.baseUrl),
-      model: model || provider.model,
-      aiderModel: `openai/${model || provider.model}`,
+      model: model || provider.model || "qwen3-coder:32b",
+      aiderModel: `openai/${model || provider.model || "qwen3-coder:32b"}`,
       apiKey: provider.apiKey,
       provider: `${name} (${provider.baseUrl})`,
     };
@@ -174,17 +201,13 @@ export function resolveCadLlm(env: Env, agent?: AgentServerConfig): CadLlmConfig
   };
 }
 
-function safeLoadConfig(): AgentServerConfig {
+function safeLoadConfig(): CadAgentLike {
   try {
     return loadConfig();
   } catch {
     // A half-configured Forge .env must not make CAD config unreadable; the
     // router's own values simply fall back to the Ollama default below.
-    return { providerOrder: ["ollama"], providers: {
-      anthropic: { baseUrl: "", model: "" }, openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
-      gemini: { baseUrl: "", model: "" }, ollama: { baseUrl: "http://localhost:11434", model: "qwen3-coder:32b" },
-      bedrock: { baseUrl: "", model: "" },
-    } } as unknown as AgentServerConfig;
+    return { providerOrder: ["bedrock"] };
   }
 }
 

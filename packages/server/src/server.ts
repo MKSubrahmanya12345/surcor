@@ -14,15 +14,12 @@ import { validateWorkspaceRoot } from "./tools/paths";
 import { configureWebSearch } from "./tools/webSearch";
 import { loadWorkspaceRules } from "./agent/rules";
 import { disposeMcpManager, initMcpManager, mcpStatuses, reloadMcpServers } from "./mcp/clientManager";
-<<<<<<< HEAD
 import { initWireupStore } from "./wireup/store";
-=======
 // Prompt 7: CAD mode. The agent server only *connects* to the MAC sidecar (an
 // optional local service like Ollama); it never installs or spawns it.
 import { loadCadConfig } from "./cad/config";
 import { runCadPipeline } from "./cad/pipeline";
 import { serveCadArtifact } from "./cad/artifacts";
->>>>>>> 1943ead57d4753cd93f43573d096935f3c07d7da
 
 export function startServer(config: AgentServerConfig = loadConfig()) {
   const provider = createProviderRouter(config);

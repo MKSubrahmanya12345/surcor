@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadCadConfig } from "../../packages/server/src/cad/config";
 import { convertStepToGlb, inspectGlb, resolveCascadeBin } from "../../packages/server/src/cad/convertToGlb";
@@ -17,7 +18,7 @@ import { convertStepToGlb, inspectGlb, resolveCascadeBin } from "../../packages/
  * the suite skips it loudly instead of pretending it passed.
  */
 
-const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
+import { fixturePath } from "./fixture";
 const configuredBin = process.env.FORGE_CAD_OCCT_BIN ?? "opencascade-tools";
 const binary = await resolveCascadeBin(configuredBin);
 
@@ -26,9 +27,9 @@ test(`${binary ? "real" : "skipped"}: OpenCASCADE triangulates a flange STEP int
     console.warn("[prompt7] opencascade-tools not found — install with `npm i -g opencascade-tools` to run the kernel test");
     return;
   }
-  const dir = await mkdtemp("/tmp/forge-cad-occt-");
+  const dir = await mkdtemp(join(tmpdir(), "forge-cad-occt-"));
   const { copyFile } = await import("node:fs/promises");
-  await copyFile(`${FIXTURES}flange.step`, join(dir, "model.step"));
+  await copyFile(fixturePath("flange.step"), join(dir, "model.step"));
 
   const config = loadCadConfig({ FORGE_CAD_OCCT_BIN: binary } as never);
   const result = await convertStepToGlb(join(dir, "model.step"), dir, config, { name: "model" });
@@ -46,7 +47,7 @@ test(`${binary ? "real" : "skipped"}: OpenCASCADE triangulates a flange STEP int
 }, 120_000);   // the WASM kernel needs a few seconds for tessellation
 
 test("the kernel test is not silently vacuous: the fixture is a real STEP", async () => {
-  const text = await Bun.file(`${FIXTURES}flange.step`).text();
+  const text = await Bun.file(fixturePath("flange.step")).text();
   expect(text.startsWith("ISO-10303-21;")).toBe(true);
   expect(text).toContain("END-ISO-10303-21;");
   expect(text).toMatch(/MANIFOLD_SOLID_BREP\(/);

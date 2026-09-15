@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CadProgressEvent, WebSearchResponse } from "@forge/shared";
 import type { CadConfig } from "../../packages/server/src/cad/config";
@@ -14,12 +15,12 @@ import { findExistingModel, normalizeObjectName, searchQueries } from "../../pac
  * is not installed.
  */
 
-const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
+import { fixturePath } from "./fixture";
 
 let dir: string;
 let hosts: { close(): void; origin: string }[] = [];
 
-const flangeStep = async (): Promise<string> => Bun.file(`${FIXTURES}flange.step`).text();
+const flangeStep = async (): Promise<string> => Bun.file(fixturePath("flange.step")).text();
 
 /** The bytes of a well-formed GLB holding one triangle. */
 export function minimalGlb(): string {
@@ -64,7 +65,7 @@ const serve = async (routes: Record<string, { body: string; type?: string; statu
 };
 
 beforeAll(async () => {
-  dir = await mkdtemp("/tmp/forge-cad-search-");
+  dir = await mkdtemp(join(tmpdir(), "forge-cad-search-"));
   const good = await flangeStep();
   hosts.push(await serve({
     "/bolts/m8-hex.step": { body: good, type: "application/step" },
@@ -144,9 +145,12 @@ const stubConverter = async (): Promise<string> => {
     "writeFileSync(src.replace(/\.[^.]+$/, '') + '.glb', Buffer.concat([out, jh, Buffer.from(jsonChunk, 'latin1'), bh, bin]));",
     "process.exit(0);",
   ].join("\n"));
-  const wrapper = join(dir, "occt-stub.sh");
-  await writeFile(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
-  await chmod(wrapper, 0o755);
+  const isWin = process.platform === "win32";
+  const wrapper = join(dir, isWin ? "occt-stub.cmd" : "occt-stub.sh");
+  await writeFile(wrapper, isWin
+    ? `@ECHO OFF\r\n"${process.execPath}" "%~dp0occt-stub.mjs" %*\r\n`
+    : `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+  if (!isWin) await chmod(wrapper, 0o755);
   return wrapper;
 };
 

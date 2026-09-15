@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { copyFile, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   classifyMissed,
@@ -16,7 +17,7 @@ import type { MacRunOutcome } from "../../packages/server/src/cad/macClient";
  * exact wording so the gate is exercised against the real format, and the
  * geometry assertions run against real OpenCASCADE STEP output.
  */
-const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
+import { fixturePath } from "./fixture";
 
 const outcome = (overrides: Partial<MacRunOutcome>): MacRunOutcome => ({
   jobId: "job1234567890",
@@ -32,9 +33,9 @@ const outcome = (overrides: Partial<MacRunOutcome>): MacRunOutcome => ({
 });
 
 const withStep = async (fixture: "flange.step" | "plate.step"): Promise<string> => {
-  const dir = await mkdtemp("/tmp/forge-cad-gate-");
+  const dir = await mkdtemp(join(tmpdir(), "forge-cad-gate-"));
   const path = join(dir, "model.step");
-  await copyFile(`${FIXTURES}${fixture}`, path);
+  await copyFile(fixturePath(fixture), path);
   return path;
 };
 
@@ -151,9 +152,9 @@ test("a primitive is allowed when the request really is a primitive", async () =
 });
 
 test("a delivered STEP that no longer parses is a failure, not a partial preview", async () => {
-  const dir = await mkdtemp("/tmp/forge-cad-gate-");
+  const dir = await mkdtemp(join(tmpdir(), "forge-cad-gate-"));
   const path = join(dir, "model.step");
-  const full = await Bun.file(`${FIXTURES}flange.step`).text();
+  const full = await Bun.file(fixturePath("flange.step")).text();
   await Bun.write(path, full.slice(0, Math.floor(full.length * 0.5)));
   const decision = await gateMacOutcome({
     outcome: outcome({ stepPath: path, errorType: "none" }),

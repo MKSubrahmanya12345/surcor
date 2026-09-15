@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { clientMessageSchema } from "../../packages/shared/src/agent-schemas";
 import { loadCadConfig, resolveCadLlm } from "../../packages/server/src/cad/config";
 
@@ -40,7 +42,7 @@ test("CAD config defaults to the documented local sidecar and a 3-attempt budget
   const config = loadCadConfig({ FORGE_CAD_MAC_URL: "", FORGE_CAD_ARTIFACT_DIR: "" } as NodeJS.ProcessEnv);
   expect(config.macBaseUrl).toBe("http://127.0.0.1:8000");
   expect(config.attemptBudget).toBe(3);
-  expect(config.artifactDir).toBe(`${process.env.HOME}/.forge/cad`);
+  expect(config.artifactDir).toBe(join(homedir(), ".forge", "cad"));
   expect(config.cascadeBin).toBe("opencascade-tools");
   expect(config.searchEnabled).toBe(true);
   expect(config.rejectTrivialPrimitive).toBe(true);

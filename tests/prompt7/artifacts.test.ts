@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CadConfig } from "../../packages/server/src/cad/config";
 import { resolveArtifactPath, serveCadArtifact } from "../../packages/server/src/cad/artifacts";
@@ -11,7 +12,7 @@ import { resolveArtifactPath, serveCadArtifact } from "../../packages/server/src
  */
 
 const cacheConfig = async (): Promise<CadConfig> => {
-  const dir = await mkdtemp("/tmp/forge-cad-cache-");
+  const dir = await mkdtemp(join(tmpdir(), "forge-cad-cache-"));
   await mkdir(join(dir, "job1"), { recursive: true });
   await writeFile(join(dir, "job1", "model.glb"), "glTF-bytes");
   await writeFile(join(dir, "job1", "model.step"), "ISO-10303-21;");
@@ -58,7 +59,7 @@ test("paths outside the CAD cache are refused", async () => {
 
 test("a symlink out of the cache does not become a read primitive", async () => {
   const config = await cacheConfig();
-  const outside = await mkdtemp("/tmp/forge-cad-outside-");
+  const outside = await mkdtemp(join(tmpdir(), "forge-cad-outside-"));
   await writeFile(join(outside, "id_ed25519.step"), "private key");
   const link = join(config.artifactDir, "job1", "escape.step");
   await symlink(join(outside, "id_ed25519.step"), link);

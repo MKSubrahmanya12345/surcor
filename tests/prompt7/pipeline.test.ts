@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CadProgressEvent, ServerMessage } from "@forge/shared";
 import type { CadConfig } from "../../packages/server/src/cad/config";
@@ -14,7 +15,7 @@ import { startFakeMacSidecar, type FakeJobScript } from "./fake-mac-sidecar";
  * improvise.
  */
 
-const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
+import { fixturePath } from "./fixture";
 
 async function stubConverter(dir: string): Promise<string> {
   const script = join(dir, "occt-stub.mjs");
@@ -32,10 +33,15 @@ async function stubConverter(dir: string): Promise<string> {
     "const bh = Buffer.alloc(8); bh.writeUInt32LE(bin.length, 0); bh.writeUInt32LE(0x004e4942, 4);",
     "writeFileSync(src.replace(/\\.[^.]+$/, '') + '.glb', Buffer.concat([out, jh, Buffer.from(jsonChunk, 'latin1'), bh, bin]));",
   ].join("\n"));
-  const wrapper = join(dir, "occt-stub.sh");
-  await writeFile(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
-  const { chmod } = await import("node:fs/promises");
-  await chmod(wrapper, 0o755);
+  const isWin = process.platform === "win32";
+  const wrapper = join(dir, isWin ? "occt-stub.cmd" : "occt-stub.sh");
+  await writeFile(wrapper, isWin
+    ? `@ECHO OFF\r\n"${process.execPath}" "%~dp0occt-stub.mjs" %*\r\n`
+    : `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+  if (!isWin) {
+    const { chmod } = await import("node:fs/promises");
+    await chmod(wrapper, 0o755);
+  }
   return wrapper;
 }
 
@@ -43,7 +49,7 @@ async function setup(script: FakeJobScript = {}, overrides: Partial<CadConfig> =
   config: CadConfig; dir: string; sidecar: Awaited<ReturnType<typeof startFakeMacSidecar>>; client: MacClient;
   messages: ServerMessage[]; emit: (message: ServerMessage) => void;
 }> {
-  const dir = await mkdtemp("/tmp/forge-cad-pipeline-");
+  const dir = await mkdtemp(join(tmpdir(), "forge-cad-pipeline-"));
   const sidecar = await startFakeMacSidecar(script);
   const config = {
     enabled: true,
@@ -77,7 +83,7 @@ async function setup(script: FakeJobScript = {}, overrides: Partial<CadConfig> =
 
 /** Point the fake sidecar at the real STEP bytes for this test run. */
 const fixtureFiles = async (): Promise<Record<string, string>> => ({
-  "model.step": await Bun.file(`${FIXTURES}flange.step`).text(),
+  "model.step": await Bun.file(fixturePath("flange.step")).text(),
 });
 
 const events = (messages: ServerMessage[]): CadProgressEvent[] =>
@@ -100,7 +106,7 @@ test("search off → MAC path → gate passes → one conversion → cad_model_r
   expect(await Bun.file(outcome.result!.glbPath).exists()).toBe(true);
   // The result must be the *fixture*, byte for byte — proof the pipeline handed
   // back the real model rather than a synthesised stand-in.
-  expect(await Bun.file(outcome.result!.stepPath).text()).toBe(await Bun.file(`${FIXTURES}flange.step`).text());
+  expect(await Bun.file(outcome.result!.stepPath).text()).toBe(await Bun.file(fixturePath("flange.step")).text());
 
   const stages = events(context.messages).map((event) => event.stage);
   expect(stages).toContain("spec_planning");
@@ -139,7 +145,7 @@ test("an unresolved QA entry is a hard stop: no model, best-of-N included", asyn
 
 test("a bare primitive standing in for a featureful request is refused", async () => {
   const context = await setup({
-    files: { "model.step": await Bun.file(`${FIXTURES}plate.step`).text() },
+    files: { "model.step": await Bun.file(fixturePath("plate.step")).text() },
   });
   const outcome = await runCadPipeline({
     prompt: "an L-bracket with four 6 mm holes and 3 mm fillets on the outer edges",
@@ -211,7 +217,7 @@ test("a cancelled pipeline emits a failure, never a stale model", async () => {
 
 test("the search-first result short-circuits MAC entirely", async () => {
   const context = await setup({}, { searchEnabled: true });
-  const flange = await Bun.file(`${FIXTURES}flange.step`).text();
+  const flange = await Bun.file(fixturePath("flange.step")).text();
   // A local host that serves the file the "search" points at.
   const fileHost = Bun.serve({
     hostname: "127.0.0.1",

@@ -1,6 +1,7 @@
 import { access, copyFile, mkdir, rename, stat } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { delimiter as pathDelimiter, basename, dirname, extname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import type { CadConfig } from "./config";
 
 /**
@@ -121,17 +122,19 @@ export async function resolveCascadeBin(configured: string): Promise<string | nu
     return (await isExecutable(configured)) ? configured : null;
   }
   const candidates = [configured];
-  const suffix = process.platform === "win32" ? ".cmd" : "";
+  const suffixes = process.platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
   const roots = [
     resolve(import.meta.dir, "..", "..", ".."),                 // packages/server
     resolve(import.meta.dir, "..", "..", "..", ".."),           // repo root
   ];
   for (const root of roots) {
-    candidates.push(join(root, "node_modules", ".bin", `${configured}${suffix}`));
+    for (const suffix of suffixes) {
+      candidates.push(join(root, "node_modules", ".bin", `${configured}${suffix}`));
+    }
   }
-  candidates.push(join(process.env.HOME ?? "/usr/local", ".npm-global", "bin", configured));
-  for (const directory of (process.env.PATH ?? "").split(":").filter(Boolean)) {
-    candidates.push(join(directory, configured));
+  candidates.push(join(process.env.HOME ?? process.env.USERPROFILE ?? homedir(), ".npm-global", "bin", configured));
+  for (const directory of (process.env.PATH ?? "").split(pathDelimiter).filter(Boolean)) {
+    for (const suffix of suffixes) candidates.push(join(directory, `${configured}${suffix}`));
   }
   for (const candidate of candidates) {
     if (await isExecutable(candidate)) return candidate;

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CadProgressEvent } from "@forge/shared";
 import { MacClient, macJobConfig } from "../../packages/server/src/cad/macClient";
 import { gateMacOutcome } from "../../packages/server/src/cad/qualityGate";
 import type { CadConfig as CadServerConfig } from "../../packages/server/src/cad/config";
 import { startFakeMacSidecar, type FakeJobScript, type FakeSidecar } from "./fake-mac-sidecar";
+import { fixturePath } from "./fixture";
 
 /**
  * Talks to a faithful fake of the sidecar over real HTTP + real SSE frames, so
@@ -48,7 +50,7 @@ function cadConfig(macBaseUrl: string, overrides: Partial<CadServerConfig> = {})
 }
 
 beforeAll(async () => {
-  dir = await mkdtemp("/tmp/forge-cad-client-");
+  dir = await mkdtemp(join(tmpdir(), "forge-cad-client-"));
 });
 
 afterAll(() => {
@@ -118,7 +120,7 @@ test("MAC's stage events become named progress lines, not a spinner", async () =
 });
 
 test("the model AND the QA diagnostics are both fetched — never the model alone", async () => {
-  const flange = await Bun.file(new URL("./fixtures/flange.step", import.meta.url).pathname).text();
+  const flange = await Bun.file(fixturePath("flange.step")).text();
   const client = await clientFor({
     files: {
       "model.step": flange,

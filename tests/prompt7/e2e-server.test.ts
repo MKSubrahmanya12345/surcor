@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ServerMessage } from "@forge/shared";
 import { startFakeMacSidecar } from "./fake-mac-sidecar";
@@ -19,7 +20,7 @@ import { inspectGlb } from "../../packages/server/src/cad/convertToGlb";
  *   · nothing outside the cache is readable through that route
  */
 
-const FIXTURES = new URL("./fixtures/", import.meta.url).pathname;
+import { fixturePath } from "./fixture";
 const PORT = Number(process.env.FORGE_PROMPT7_PORT ?? 4711);
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -53,15 +54,20 @@ async function converterBin(): Promise<string> {
     "const bh = Buffer.alloc(8); bh.writeUInt32LE(bin.length, 0); bh.writeUInt32LE(0x004e4942, 4);",
     "writeFileSync(src.replace(/\\.[^.]+$/, '') + '.glb', Buffer.concat([out, jh, Buffer.from(chunk, 'latin1'), bh, bin]));",
   ].join("\n"));
-  const wrapper = join(dir, "occt-stub.sh");
-  await writeFile(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
-  const { chmod } = await import("node:fs/promises");
-  await chmod(wrapper, 0o755);
+  const isWin = process.platform === "win32";
+  const wrapper = join(dir, isWin ? "occt-stub.cmd" : "occt-stub.sh");
+  await writeFile(wrapper, isWin
+    ? `@ECHO OFF\r\n"${process.execPath}" "%~dp0occt-stub.mjs" %*\r\n`
+    : `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+  if (!isWin) {
+    const { chmod } = await import("node:fs/promises");
+    await chmod(wrapper, 0o755);
+  }
   return wrapper;
 }
 
 beforeAll(async () => {
-  dir = await mkdtemp("/tmp/forge-cad-e2e-");
+  dir = await mkdtemp(join(tmpdir(), "forge-cad-e2e-"));
   try {
     const probe = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(500) });
     // Something already owns the port (a dev server). Don't fight it.
@@ -72,7 +78,7 @@ beforeAll(async () => {
   if (skipped) return;
 
   sidecar = await startFakeMacSidecar({
-    files: { "model.step": await Bun.file(`${FIXTURES}flange.step`).text() },
+    files: { "model.step": await Bun.file(fixturePath("flange.step")).text() },
   });
 
   child = Bun.spawn(["bun", "run", "packages/server/src/server.ts"], {
@@ -178,7 +184,7 @@ test("a CAD request travels the real socket, produces a cached model, and is ser
   const stepResponse = await fetch(`${BASE}/cad/artifact?path=${encodeURIComponent(readyMessage.result.stepPath)}`);
   expect(stepResponse.status).toBe(200);
   expect(stepResponse.headers.get("content-type")).toBe("application/step");
-  expect(await stepResponse.text()).toBe(await Bun.file(`${FIXTURES}flange.step`).text());
+  expect(await stepResponse.text()).toBe(await Bun.file(fixturePath("flange.step")).text());
 
   const glbResponse = await fetch(`${BASE}/cad/artifact?path=${encodeURIComponent(readyMessage.result.glbPath)}`);
   expect(glbResponse.status).toBe(200);
@@ -203,7 +209,7 @@ test("a CAD request travels the real socket, produces a cached model, and is ser
 
 test("a dead sidecar reaches the client as a specific failure, not a spinner or a stub", async () => {
   if (skipped) return;
-  const failDir = await mkdtemp("/tmp/forge-cad-e2e-fail-");
+  const failDir = await mkdtemp(join(tmpdir(), "forge-cad-e2e-fail-"));
   const failPort = PORT + 1;
   const child = Bun.spawn(["bun", "run", "packages/server/src/server.ts"], {
     cwd: join(import.meta.dir, "..", ".."),

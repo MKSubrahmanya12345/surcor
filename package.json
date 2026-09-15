@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "packageManager": "bun@1.2.22",
   "workspaces": ["packages/*"],
+  "devDependencies": {
+    "opencascade-tools": "^0.0.9"
+  },
   "scripts": {
     "dev": "bun run --cwd packages/client dev",
     "build:server": "bun build packages/server/src/server.ts --target bun --outdir packages/server/dist",

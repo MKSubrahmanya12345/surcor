@@ -234,3 +234,93 @@ See **Build** above. On launch the Electron main process health-checks
 `bun run packages/server/src/server.ts` (dev) or the bundled
 `forge-server/server.js` resource (packaged). It never kills a server it did
 not spawn, and `FORGE_SERVER_EXTERNAL=1` disables auto-start entirely.
+
+## Prompt 7 — CAD mode (text-to-model: search → generate → verify)
+
+A fourth chat mode. You type an object — `a standard M8 hex bolt`, `arduino uno`,
+`a wristwatch`, `a simple articulated toy gyroscope` — and get back either a real,
+verified 3D model you can orbit in the panel, or a card that says exactly why
+there isn't one. There is no third outcome: **Forge never shows a placeholder
+primitive, and never quietly keeps a failed attempt.**
+
+Because "as good as a real CAD file, or nothing" is not something an LLM can freehand,
+generation is delegated to a real geometry kernel: an LLM writes
+[build123d](https://github.com/gumyr/build123d) code (Python over OpenCASCADE —
+the kernel family behind FreeCAD/SolidWorks), that code is *executed*, and the
+result is checked mechanically before you ever see it. The pipeline is
+[MAC (Multi-Agent CAD)](https://github.com/Pan-Chera/Multi-Agent-CAD), an MIT
+project from Tsinghua's IEI Lab that splits the work into four agents —
+Spec Planner → Geometric Architect → Python Coder → an Aider-powered QA/repair
+loop — and reports 99.3% feature pass rate on its benchmark. MAC is a *white-box*
+system: every run writes `temp_missed_N.json`, whose entries are classified
+`MISSED_CUT` / `CUT_ERROR` / `FILLET_FAILED` / `CHAMFER_FAILED` (plus
+non-blocking `*_DEGRADED` / `*_PARTIAL`). Forge reads that file and MAC's own
+`error_type` verdict — it does **not** invent a quality heuristic of its own.
+
+### The pipeline (`packages/server/src/cad/`)
+
+| File | Job |
+|---|---|
+| `searchExisting.ts` | Ask the Prompt 5 web search for a directly downloadable STEP, then judge the bytes, not the URL: magic bytes and structure first (a login page saved as `bolt.step` fails here), then a real OpenCASCADE read. A manufacturer's Arduino Uno STEP beats any generated approximation of it — a generator cannot reproduce silkscreen — so this branch wins when it finds one. Returns `null` when nothing verifiable exists, which is the normal answer for a generic object. |
+| `macClient.ts` | `generate(prompt): AsyncGenerator<CadProgressEvent, MacRunOutcome>` over the sidecar's real HTTP surface (`POST /api/run`, SSE `GET /api/jobs/{id}/events`, `…/result`, `…/files/{name}`, `…/cancel` — read out of `web/server.py`, see `sidecars/README.md`). On completion it fetches the STEP **and** the diagnostics; a model without its QA verdict is not returned. Every failure string is MAC's own text, never "something went wrong". |
+| `qualityGate.ts` | Pass requires MAC's verdict to be `none` **and** zero unresolved diagnostics, then re-validates the delivered bytes and rejects a single bare primitive when the request clearly asked for features. `FORGE_CAD_ATTEMPT_BUDGET` (3) is passed to MAC as `MAX_RETRIES`, so retries ride MAC's own iteration checkpoint (10 s, auto-iterate) rather than restarting the Spec Planner. Exhausted budget ⇒ hard stop. |
+| `convertToGlb.ts` | One conversion function for both branches: the `opencascade-tools` CLI (`npm i -g opencascade-tools`) via `Bun.spawn`, then a GLB container parse that requires actual triangles — an empty scene is a failure, not a render. |
+| `pipeline.ts` | search → (found? convert : generate → gate → convert), emitting `cad_progress` at every stage. |
+
+### One-time sidecar setup (never automated)
+
+MAC needs a real Python environment (conda recommended; its README documents a
+pure-pip fallback for the `aider-chat`/`build123d` numpy conflict) and its own
+LLM key. `sidecars/setup-mac.sh` clones and installs it exactly as upstream
+prescribes, `sidecars/start-mac.sh` runs `python -m multi_agent_cad.web` on
+loopback (MAC's default `0.0.0.0` is overridden — it executes generated Python
+server-side, so it stays off the LAN). Full walkthrough, endpoint table, and the
+`FORGE_CAD_*` settings live in **[`sidecars/README.md`](sidecars/README.md)**.
+Treat it like Ollama: an optional service Forge connects to. If it is not
+running, CAD mode says so, names the command that starts it, and stops — the
+search-first path still works without it.
+
+### Client UI
+
+`components/CADPanel/` renders inside Prompt 4's ChatPanel whenever the mode
+switcher reads **CAD** (same `#panel-right-slot`, same composer; the composer's
+placeholder becomes `e.g. arduino uno, standard wheel, wristwatch…`). It shows
+the real stage log — `SEARCH / SPEC / ARCHITECT / CODE / QA / MESH`, with MAC's
+own stage text — then either a `<model-viewer>` (`@google/model-viewer`) with
+orbit, zoom and auto-rotate, a badge saying **EXISTING MANUFACTURER FILE** or
+**GENERATED · QA VERIFIED**, and Download STEP / GLB / STL buttons (served by
+`GET /cad/artifact`, restricted to Forge's CAD cache); or a red-bordered failure
+card quoting the diagnostics plus a *Try again with more detail* form that hands
+the prompt back to you instead of silently re-running.
+
+### Protocol and edits to existing code
+
+`packages/shared` grew `CadProgressEvent`, `CadModelResult`, `CadFailure`, the
+three `ServerMessage` variants, one `ClientMessage` variant (`cad_generate`) and
+`cadGenerateArgsSchema`; `AgentMode` is widened to
+`"ask" | "agent" | "plan" | "cad"`. Nothing else in the existing exports changed.
+A CAD request is deliberately **not** a `user_message`: no provider call happens,
+no tool loop runs, and a search-only result costs nothing.
+
+Four existing files had to change beyond the mode switcher, all of them minimally
+and additively, because a new mode cannot be registered without them:
+`db/schema.sql` + `db/client.ts` (the `messages.mode` CHECK gained `'cad'`, with a
+one-time rebuild for databases created before it, covered by tests),
+`agent-schemas.ts` (the new client variant must validate, or the socket refuses
+it), `server.ts` (route `cad_generate`, share the socket's single active-turn slot
+so the existing `cancel` aborts a CAD run *and* the MAC job, and mount
+`GET /cad/artifact`), `useChatStore.ts` + `ChatPanel.tsx` (the switcher option, the
+CAD placeholder, mounting `<CADPanel/>`, and three new message cases). Ask, Agent
+and Plan keep their behaviour exactly — including the rule that a CAD run blocks an
+agent turn rather than running beside it.
+
+### Tests
+
+`bun test tests/prompt7` — 80 tests over the model validators (real OpenCASCADE
+STEP fixtures, HTML-under-`.step`, truncated STEP, bogus STL headers), the quality
+gate (MAC's taxonomy, hard stops, placeholder rejection), the MAC client against a
+sidecar that mirrors `web/server.py` route for route (including cancel, crash and
+400 paths), the search-first path over a local HTTP host, the artifact route's
+path containment, the DB migration, and a **whole-stack** test that boots a real
+`bun packages/server/src/server.ts`, opens a real WebSocket, runs a CAD request and
+reads the verified GLB back over HTTP.

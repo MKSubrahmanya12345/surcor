@@ -8,3 +8,6 @@ packages/client/src/dist-electron/
 .env.*
 !.env.example
 release/
+# Prompt 7: the MAC (Multi-Agent CAD) sidecar is a one-time, opt-in local
+# install (see sidecars/README.md) — the clone stays out of Forge's own tree.
+sidecars/multi-agent-cad/

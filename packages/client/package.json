@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@forge/shared": "workspace:*",
+    "@google/model-viewer": "4.3.1",
     "@monaco-editor/react": "^4.7.0",
     "@octokit/auth-oauth-device": "^8.0.5",
     "@octokit/rest": "^22.0.1",

@@ -12,7 +12,10 @@ CREATE TABLE IF NOT EXISTS messages (
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
   content TEXT NOT NULL,
-  mode TEXT NOT NULL CHECK (mode IN ('ask', 'agent', 'plan')),
+  -- Prompt 7 widened this CHECK with 'cad' (the shared AgentMode union widened
+  -- the same way). Databases created before CAD mode existed are migrated by
+  -- db/client.ts, which rebuilds the table once — see ensureCadMode().
+  mode TEXT NOT NULL CHECK (mode IN ('ask', 'agent', 'plan', 'cad')),
   tool_calls TEXT,
   created_at INTEGER NOT NULL
 );
@@ -95,6 +98,7 @@ INSERT INTO settings(key, value) VALUES ('schema_version', '2')
   ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 -- ---------------------------------------------------------------------------
+<<<<<<< HEAD
 -- Wireup engine workstate: the agentic hardware pipeline persists its projects
 -- and the component catalog as JSON blobs through the pluggable sink seam. The
 -- same forge.sqlite file therefore holds hardware state alongside sessions.
@@ -112,5 +116,17 @@ CREATE TABLE IF NOT EXISTS wireup_components (
   updated_at INTEGER NOT NULL
 );
 
+=======
+-- Prompt 7 migration: CAD mode.
+--
+-- A CAD turn is persisted as a normal chat message with mode = 'cad', so the
+-- CHECK above had to accept it. SQLite cannot relax a CHECK in place, so the
+-- one-time rebuild for pre-existing databases lives in db/client.ts
+-- (ensureCadMode), right after this file runs — it inspects sqlite_master, and
+-- is a no-op for every database that already allows 'cad'. Nothing else in the
+-- schema is touched: no column, index, or table from Prompts 3-6 changed.
+-- ---------------------------------------------------------------------------
+
+>>>>>>> 1943ead57d4753cd93f43573d096935f3c07d7da
 INSERT INTO settings(key, value) VALUES ('schema_version', '3')
   ON CONFLICT(key) DO UPDATE SET value = excluded.value;

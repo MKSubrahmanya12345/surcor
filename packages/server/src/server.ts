@@ -14,7 +14,15 @@ import { validateWorkspaceRoot } from "./tools/paths";
 import { configureWebSearch } from "./tools/webSearch";
 import { loadWorkspaceRules } from "./agent/rules";
 import { disposeMcpManager, initMcpManager, mcpStatuses, reloadMcpServers } from "./mcp/clientManager";
+<<<<<<< HEAD
 import { initWireupStore } from "./wireup/store";
+=======
+// Prompt 7: CAD mode. The agent server only *connects* to the MAC sidecar (an
+// optional local service like Ollama); it never installs or spawns it.
+import { loadCadConfig } from "./cad/config";
+import { runCadPipeline } from "./cad/pipeline";
+import { serveCadArtifact } from "./cad/artifacts";
+>>>>>>> 1943ead57d4753cd93f43573d096935f3c07d7da
 
 export function startServer(config: AgentServerConfig = loadConfig()) {
   const provider = createProviderRouter(config);
@@ -33,6 +41,9 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
   // the embeddings/index tables on boot). Tools reach it through index/service.
   initIndexService(database.sqlite, config);
   configureWebSearch(config.webSearch);
+  // Prompt 7: CAD mode config (sidecar URL, attempt budget, artifact cache, and
+  // which OpenAI-compatible endpoint MAC's four stages should call).
+  const cadConfig = loadCadConfig();
   // Persist only non-secret settings. Keys/tokens are read from the environment.
   database.setSetting("provider_order", config.providerOrder);
   database.setSetting("agent_max_turns", config.maxTurns);
@@ -93,6 +104,67 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
     void task.then(() => tasksInFlight.delete(task), () => tasksInFlight.delete(task));
   };
 
+  /**
+   * Prompt 7: a CAD request. Not an agent turn — no provider call, no tool loop,
+   * no file writes. Progress and the verdict travel as `cad_*` ServerMessages,
+   * and the run occupies the socket's single active turn so the existing
+   * `cancel` message aborts it (and aborts the MAC job with it).
+   */
+  const beginCadTurn = (socket: ServerWebSocket<AgentSocketState>, prompt: string) => {
+    const state = socket.data;
+    const session = state.session!;
+    const controller = new AbortController();
+    database.appendMessage(session.id, { id: crypto.randomUUID(), role: "user", content: prompt, mode: "cad", createdAt: Date.now() });
+    state.activeTurn = controller;
+    const emitCad = (message: ServerMessage): void => {
+      // A cancelled run must still be allowed to report why nothing appeared.
+      if (!controller.signal.aborted || message.type === "cad_generation_failed") emit(socket, message);
+    };
+    const task = runCadPipeline({
+      prompt, config: cadConfig, emit: emitCad, signal: controller.signal,
+      onRawEvent: (event) => {
+        const line = typeof event.log === "string" ? event.log : "";
+        if (line) console.info(`[forge-cad] ${line.slice(0, 240)}`);
+      },
+    }).then((outcome) => {
+      for (const note of outcome.notes) console.info(`[forge-cad] ${note}`);
+      const summary = outcome.result
+        ? outcome.result.source === "existing_model"
+          ? `CAD: verified existing manufacturer model for "${prompt}".\nSTEP: ${outcome.result.stepPath}\nPreview: ${outcome.result.glbPath}\nSource: ${outcome.result.sourceUrl ?? "unknown"}`
+          : `CAD: MAC-generated, QA-verified model for "${prompt}".\nSTEP: ${outcome.result.stepPath}\nPreview: ${outcome.result.glbPath}`
+        : `CAD request did not produce a model (${outcome.failure?.stage ?? "unknown"}): ${outcome.failure?.reason ?? "no failure reason reported"}`;
+      // Same id in the database row and on the wire, so the summary is in the
+      // transcript now and after a reload, with no duplicate.
+      const summaryId = crypto.randomUUID();
+      if (!state.closed) {
+        database.appendMessage(session.id, { id: summaryId, role: "assistant", content: summary, mode: "cad", createdAt: Date.now() });
+        if (!controller.signal.aborted) {
+          emit(socket, { type: "chat_chunk", messageId: summaryId, delta: summary });
+          emit(socket, { type: "chat_done", messageId: summaryId });
+        }
+      }
+      // The pipeline already emitted `cad_generation_failed` for every refusal;
+      // this only covers a result-less, failure-less return, which should not
+      // happen but must not leave the panel spinning either.
+      if (!outcome.result && !outcome.failure) {
+        emitCad({ type: "cad_generation_failed", failure: { reason: "CAD pipeline stopped without a result or a reason.", stage: "qa_pass" } });
+      }
+    }).catch((error: unknown) => {
+      const reason = controller.signal.aborted
+        ? "Cancelled before the CAD pipeline could finish."
+        : `CAD pipeline error: ${error instanceof Error ? error.message : "unknown error"}`;
+      emitCad({ type: "cad_generation_failed", failure: { reason, stage: controller.signal.aborted ? "qa_pass" : "spec_planning" } });
+      if (!controller.signal.aborted) console.error(`[forge-cad] ${reason}`);
+    }).finally(() => {
+      state.activeTurn = null;
+      state.activeTask = null;
+      if (state.closed) sessionsInUse.delete(session.id);
+    });
+    state.activeTask = task;
+    tasksInFlight.add(task);
+    void task.then(() => tasksInFlight.delete(task), () => tasksInFlight.delete(task));
+  };
+
   const handle = async (socket: ServerWebSocket<AgentSocketState>, message: ClientMessage): Promise<void> => {
     const state = socket.data;
     if (state.closed || shuttingDown) return;
@@ -141,6 +213,14 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
     }
     const session = state.session;
     if (!session) throw new Error("Send init with workspaceRoot before other messages.");
+    // Prompt 7: CAD mode. Shares the one-active-turn slot with agent turns, so a
+    // running generation blocks (and is blocked by) a chat turn, and `cancel`
+    // below stops whichever is in flight.
+    if (message.type === "cad_generate") {
+      if (state.activeTurn) throw new Error("A turn is already running. Send cancel before starting another.");
+      beginCadTurn(socket, message.prompt.trim());
+      return;
+    }
     if (message.type === "cancel") {
       state.activeTurn?.abort(new Error("Request cancelled."));
       session.pendingPlanId = null;
@@ -214,6 +294,10 @@ export function startServer(config: AgentServerConfig = loadConfig()) {
       if (!authorize(request)) return new Response("Forbidden", { status: 403 });
       const path = new URL(request.url).pathname;
       if (path === "/health") return Response.json({ ok: true, service: "forge-agent" });
+      // Prompt 7: read-only access to Forge's own CAD cache (verified STEP/GLB/STL
+      // for <model-viewer> and the Download buttons). Paths outside that
+      // directory are refused by the handler, not by this route list.
+      if (path === "/cad/artifact") return serveCadArtifact(request, cadConfig, config.token);
       if (path !== "/" && path !== "/ws") return new Response("Not found", { status: 404 });
       if (server.upgrade(request, { data: {
         session: null, initializing: false, closed: false, activeTurn: null, activeTask: null, queue: Promise.resolve(), queuedMessages: 0,

@@ -12,7 +12,7 @@ export interface OpenTab {
   language: string;        // monaco language id
 }
 
-export type AgentMode = "ask" | "agent" | "plan";
+export type AgentMode = "ask" | "agent" | "plan" | "cad";
 
 export interface ChatMessage {
   id: string;
@@ -70,7 +70,13 @@ export type ServerMessage =
   // Chunks are incremental; the existing tool_result is the final, complete result.
   | { type: "tool_result_chunk"; result: ToolResult; stream: TerminalOutputStream }
   // Prompt 6: MCP server connection states, broadcast on change and on request.
-  | { type: "mcp_status"; servers: McpServerStatus[] };
+  | { type: "mcp_status"; servers: McpServerStatus[] }
+  // Prompt 7 (CAD mode): real progress from the text-to-model pipeline, the
+  // verified model, or the specific reason generation was refused. Appended;
+  // no existing member changed.
+  | { type: "cad_progress"; event: CadProgressEvent }
+  | { type: "cad_model_ready"; result: CadModelResult }
+  | { type: "cad_generation_failed"; failure: CadFailure };
 
 export type ClientMessage =
   | { type: "user_message"; content: string; mode: AgentMode }
@@ -80,7 +86,9 @@ export type ClientMessage =
   | { type: "approve_plan" }
   // Prompt 6: ask for the current MCP server states / re-read ~/.forge/mcp.json.
   | { type: "mcp_status_request" }
-  | { type: "mcp_reload" };
+  | { type: "mcp_reload" }
+  // Prompt 7: CAD mode. `cancel` (already part of the protocol) aborts a run.
+  | { type: "cad_generate"; prompt: string };
 
 // ---------------------------------------------------------------------------
 // Terminal (Prompt 2)
@@ -590,4 +598,44 @@ export interface McpServerStatus {
   toolCount: number;           // tools registered as mcp__<name>__<tool>
   toolNames: string[];
   error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// CAD mode (Prompt 7): text-to-model — search first, then MAC, then a hard
+// quality gate. Everything here is NEW; no Prompt 1-6 export was touched
+// except `AgentMode` (widened with "cad") and the two unions above.
+// ---------------------------------------------------------------------------
+
+/**
+ * One step of the CAD pipeline, emitted as it actually happens. `detail` is
+ * derived from the underlying tool's own output (MAC's NDJSON stage records,
+ * the search provider's hits, the QA diagnostics), never invented here.
+ */
+export interface CadProgressEvent {
+  stage: "searching_existing" | "spec_planning" | "architecting" |
+         "coding" | "qa_pass" | "converting";
+  detail: string;          // human-readable, e.g. "QA pass 2/3: checking fillets"
+}
+
+/**
+ * A verified model. Paths are absolute on the *agent server* host (the sidecar
+ * and the conversion CLI run there, not in the renderer); the client turns them
+ * into `GET /cad/artifact?path=…` URLs served from Forge's CAD cache only.
+ */
+export interface CadModelResult {
+  source: "existing_model" | "generated";
+  glbPath: string;
+  stepPath: string;
+  stlPath?: string;
+  sourceUrl?: string;      // populated when source === "existing_model"
+}
+
+/**
+ * Why no model is being shown. `reason` must be specific enough to act on
+ * (which QA entry, which stage, how many attempts) — a generic "something
+ * went wrong" is a bug in this feature, by design.
+ */
+export interface CadFailure {
+  reason: string;          // specific, e.g. "FILLET_FAILED on 2 edge groups after 3 attempts"
+  stage: CadProgressEvent["stage"];
 }
